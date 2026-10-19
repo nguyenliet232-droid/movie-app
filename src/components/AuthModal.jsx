@@ -1,5 +1,14 @@
 import { useState } from "react";
-import { X, Mail, Lock, User, KeyRound, ArrowRight } from "lucide-react";
+import {
+  X,
+  Mail,
+  Lock,
+  User,
+  KeyRound,
+  ArrowRight,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 
 const API_URL = "https://user-management-backend-7clg.onrender.com/api";
 
@@ -10,10 +19,15 @@ function AuthModal({ isOpen, onClose, onLoginSuccess }) {
   // Form State
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState(""); // Thêm state nhập lại mật khẩu
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
+
+  // 🌟 State quản lý ẩn/hiện mật khẩu
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
@@ -29,6 +43,9 @@ function AuthModal({ isOpen, onClose, onLoginSuccess }) {
     setName("");
     setOtp("");
     setNewPassword("");
+    setShowPassword(false);
+    setShowConfirmPassword(false);
+    setShowNewPassword(false);
     setMessage({ type: "", text: "" });
     onClose();
   };
@@ -65,11 +82,10 @@ function AuthModal({ isOpen, onClose, onLoginSuccess }) {
     }
   };
 
-  // 2. Xử lý gửi OTP Đăng ký (Có kiểm tra khớp mật khẩu)
+  // 2. Xử lý gửi OTP Đăng ký
   const handleSendRegisterOTP = async (e) => {
     e.preventDefault();
 
-    // ⛔ KIỂM TRA MẬT KHẨU KHỚP NHAU
     if (password !== confirmPassword) {
       setMessage({
         type: "error",
@@ -219,12 +235,12 @@ function AuthModal({ isOpen, onClose, onLoginSuccess }) {
         {/* Nút đóng */}
         <button
           onClick={handleClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-full bg-slate-800 transition"
+          className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-full bg-slate-800 transition cursor-pointer"
         >
           <X className="w-5 h-5" />
         </button>
 
-        {/* Tiêu đề linh hoạt theo view */}
+        {/* Tiêu đề */}
         <h2 className="text-2xl font-bold mb-2 text-center text-red-500">
           {view === "login" && "Đăng Nhập"}
           {view.startsWith("register") && "Đăng Ký Tài Khoản"}
@@ -238,7 +254,7 @@ function AuthModal({ isOpen, onClose, onLoginSuccess }) {
             "Nhập email đã đăng ký để nhận mã OTP lấy lại mật khẩu"}
         </p>
 
-        {/* Thẻ Thông báo */}
+        {/* Thông báo */}
         {message.text && (
           <div
             className={`p-3 rounded-lg text-xs font-medium mb-4 ${
@@ -286,13 +302,24 @@ function AuthModal({ isOpen, onClose, onLoginSuccess }) {
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   required
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-red-500"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-10 pr-10 py-2.5 text-sm focus:outline-none focus:border-red-500"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-3 text-slate-400 hover:text-white cursor-pointer"
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
               </div>
             </div>
 
@@ -306,7 +333,7 @@ function AuthModal({ isOpen, onClose, onLoginSuccess }) {
           </form>
         )}
 
-        {/* 2. FORM ĐĂNG KÝ - BƯỚC 1: NHẬP THÔNG TIN (CÓ XÁC NHẬN MẬT KHẨU) */}
+        {/* 2. FORM ĐĂNG KÝ - BƯỚC 1 */}
         {view === "register-1" && (
           <form onSubmit={handleSendRegisterOTP} className="space-y-4">
             <div>
@@ -350,13 +377,24 @@ function AuthModal({ isOpen, onClose, onLoginSuccess }) {
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   required
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-red-500"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-10 pr-10 py-2.5 text-sm focus:outline-none focus:border-red-500"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-3 text-slate-400 hover:text-white cursor-pointer"
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
               </div>
             </div>
 
@@ -367,13 +405,24 @@ function AuthModal({ isOpen, onClose, onLoginSuccess }) {
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
                 <input
-                  type="password"
+                  type={showConfirmPassword ? "text" : "password"}
                   required
                   placeholder="••••••••"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-red-500"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-10 pr-10 py-2.5 text-sm focus:outline-none focus:border-red-500"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute right-3 top-3 text-slate-400 hover:text-white cursor-pointer"
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
               </div>
             </div>
 
@@ -390,7 +439,7 @@ function AuthModal({ isOpen, onClose, onLoginSuccess }) {
           </form>
         )}
 
-        {/* 3. FORM ĐĂNG KÝ - BƯỚC 2: NHẬP MÃ OTP */}
+        {/* 3. FORM ĐĂNG KÝ - BƯỚC 2: NHẬP OTP */}
         {view === "register-2" && (
           <form onSubmit={handleVerifyRegisterOTP} className="space-y-4">
             <div>
@@ -430,7 +479,7 @@ function AuthModal({ isOpen, onClose, onLoginSuccess }) {
           </form>
         )}
 
-        {/* 4. FORM QUÊN MẬT KHẨU - BƯỚC 1: NHẬP EMAIL */}
+        {/* 4. FORM QUÊN MẬT KHẨU - BƯỚC 1 */}
         {view === "forgot-1" && (
           <form onSubmit={handleSendForgotOTP} className="space-y-4">
             <div>
@@ -476,7 +525,7 @@ function AuthModal({ isOpen, onClose, onLoginSuccess }) {
           </form>
         )}
 
-        {/* 5. FORM QUÊN MẬT KHẨU - BƯỚC 2: NHẬP OTP & ĐỔI MẬT KHẨU */}
+        {/* 5. FORM QUÊN MẬT KHẨU - BƯỚC 2 */}
         {view === "forgot-2" && (
           <form onSubmit={handleResetPassword} className="space-y-4">
             <div>
@@ -505,13 +554,24 @@ function AuthModal({ isOpen, onClose, onLoginSuccess }) {
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
                 <input
-                  type="password"
+                  type={showNewPassword ? "text" : "password"}
                   required
                   placeholder="••••••••"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-red-500"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-10 pr-10 py-2.5 text-sm focus:outline-none focus:border-red-500"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                  className="absolute right-3 top-3 text-slate-400 hover:text-white cursor-pointer"
+                >
+                  {showNewPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
               </div>
             </div>
 
@@ -533,7 +593,7 @@ function AuthModal({ isOpen, onClose, onLoginSuccess }) {
           </form>
         )}
 
-        {/* CHÂN MODAL: CHUYỂN ĐỔI GIỮA ĐĂNG NHẬP / ĐĂNG KÝ */}
+        {/* CHÂN MODAL */}
         {view !== "forgot-1" && view !== "forgot-2" && (
           <div className="mt-6 pt-4 border-t border-slate-800 text-center text-xs text-slate-400">
             {view.startsWith("register") ? (
