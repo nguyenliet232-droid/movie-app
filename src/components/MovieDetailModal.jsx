@@ -6,9 +6,7 @@ function MovieDetailModal({ movie, onClose, onAddToHistory, currentUser }) {
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
 
-  if (!movie) return null;
-
-  // Tự động thêm vào lịch sử xem & tải bình luận của phim này từ localStorage
+  // ✅ ĐẶT TẤT CẢ HOOKS LÊN TRÊN CÙNG (Trước mọi câu lệnh return)
   useEffect(() => {
     if (movie) {
       if (onAddToHistory) onAddToHistory(movie);
@@ -40,6 +38,9 @@ function MovieDetailModal({ movie, onClose, onAddToHistory, currentUser }) {
     }
   }, [movie]);
 
+  // Sau khi khai báo xong hết các Hooks thì mới được dùng return điều kiện
+  if (!movie) return null;
+
   // Gửi bình luận mới
   const handleAddReview = (e) => {
     e.preventDefault();
@@ -55,7 +56,7 @@ function MovieDetailModal({ movie, onClose, onAddToHistory, currentUser }) {
       userName: currentUser.name || "Thành viên",
       userEmail: currentUser.email || "",
       rating: Number(rating),
-      text: comment.trim(), // Đồng bộ tên trường là 'text'
+      text: comment.trim(),
       date: new Date().toLocaleDateString("vi-VN"),
     };
 
