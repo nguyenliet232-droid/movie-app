@@ -81,21 +81,23 @@ function MovieDetailModal({ movie, onClose, onAddToHistory, currentUser }) {
         </button>
 
         {/* Khung Trình chiếu Video */}
-        <div className="aspect-video w-full bg-black">
+        <div className="aspect-video w-full bg-black relative overflow-hidden rounded-t-2xl">
           {(() => {
             const getEmbedUrl = (url) => {
               if (!url) return "";
-              // Xử lý link dạng youtu.be/ID
+              let videoId = "";
+
               if (url.includes("youtu.be/")) {
-                const videoId = url.split("youtu.be/")[1]?.split("?")[0];
-                return `https://www.youtube.com/embed/${videoId}`;
+                videoId = url.split("youtu.be/")[1]?.split("?")[0];
+              } else if (url.includes("watch?v=")) {
+                videoId = url.split("watch?v=")[1]?.split("&")[0];
+              } else if (url.includes("/embed/")) {
+                videoId = url.split("/embed/")[1]?.split("?")[0];
               }
-              // Xử lý link dạng youtube.com/watch?v=ID hoặc youtube.com/embed/ID
-              if (url.includes("watch?v=")) {
-                const videoId = url.split("watch?v=")[1]?.split("&")[0];
-                return `https://www.youtube.com/embed/${videoId}`;
-              }
-              return url;
+
+              if (!videoId) return url;
+
+              return `https://www.youtube.com/embed/${videoId}?autoplay=1&modestbranding=1&rel=0&controls=1`;
             };
 
             const embedUrl = getEmbedUrl(movie.videoUrl);
@@ -104,7 +106,8 @@ function MovieDetailModal({ movie, onClose, onAddToHistory, currentUser }) {
               <iframe
                 src={embedUrl}
                 title={movie.title}
-                className="w-full h-full"
+                className="w-full h-full absolute inset-0 border-0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
               ></iframe>
             ) : (
@@ -112,7 +115,7 @@ function MovieDetailModal({ movie, onClose, onAddToHistory, currentUser }) {
                 src={movie.videoUrl}
                 controls
                 autoPlay
-                className="w-full h-full"
+                className="w-full h-full object-cover"
               ></video>
             );
           })()}
