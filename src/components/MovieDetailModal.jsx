@@ -82,22 +82,40 @@ function MovieDetailModal({ movie, onClose, onAddToHistory, currentUser }) {
 
         {/* Khung Trình chiếu Video */}
         <div className="aspect-video w-full bg-black">
-          {movie.videoUrl?.includes("youtube.com") ||
-          movie.videoUrl?.includes("youtu.be") ? (
-            <iframe
-              src={movie.videoUrl.replace("watch?v=", "embed/")}
-              title={movie.title}
-              className="w-full h-full"
-              allowFullScreen
-            ></iframe>
-          ) : (
-            <video
-              src={movie.videoUrl}
-              controls
-              autoPlay
-              className="w-full h-full"
-            ></video>
-          )}
+          {(() => {
+            const getEmbedUrl = (url) => {
+              if (!url) return "";
+              // Xử lý link dạng youtu.be/ID
+              if (url.includes("youtu.be/")) {
+                const videoId = url.split("youtu.be/")[1]?.split("?")[0];
+                return `https://www.youtube.com/embed/${videoId}`;
+              }
+              // Xử lý link dạng youtube.com/watch?v=ID hoặc youtube.com/embed/ID
+              if (url.includes("watch?v=")) {
+                const videoId = url.split("watch?v=")[1]?.split("&")[0];
+                return `https://www.youtube.com/embed/${videoId}`;
+              }
+              return url;
+            };
+
+            const embedUrl = getEmbedUrl(movie.videoUrl);
+
+            return embedUrl.includes("youtube.com") ? (
+              <iframe
+                src={embedUrl}
+                title={movie.title}
+                className="w-full h-full"
+                allowFullScreen
+              ></iframe>
+            ) : (
+              <video
+                src={movie.videoUrl}
+                controls
+                autoPlay
+                className="w-full h-full"
+              ></video>
+            );
+          })()}
         </div>
 
         {/* Thông tin Phim */}
