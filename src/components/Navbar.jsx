@@ -12,7 +12,7 @@ import {
   Play,
 } from "lucide-react";
 
-function Navbar({
+export default function Navbar({
   searchTerm,
   setSearchTerm,
   currentUser,
@@ -24,23 +24,25 @@ function Navbar({
   setActiveTab,
   darkMode,
   setDarkMode,
-  movies = [], // Truyền danh sách phim vào Navbar để làm gợi ý nhanh
-  onSelectMovie, // Hàm mở trang xem phim khi click vào gợi ý
+  movies = [],
+  onSelectMovie,
 }) {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchRef = useRef(null);
 
-  // Lọc danh sách phim gợi ý dựa theo từ khóa tìm kiếm
+  // Lọc danh sách phim gợi ý (không phân biệt chữ hoa/thường, kiểm tra cả title và name)
   const searchSuggestions =
     searchTerm.trim() === ""
       ? []
       : movies
-          .filter((m) =>
-            m.title.toLowerCase().includes(searchTerm.toLowerCase()),
-          )
-          .slice(0, 5); // Hiển thị tối đa 5 kết quả gợi ý
+          .filter((m) => {
+            const keyword = searchTerm.toLowerCase();
+            const movieTitle = (m.title || m.name || "").toLowerCase();
+            return movieTitle.includes(keyword);
+          })
+          .slice(0, 5);
 
-  // Đóng ô tìm kiếm và danh sách gợi ý khi click ra ngoài
+  // Đóng ô tìm kiếm khi click ra ngoài
   useEffect(() => {
     function handleClickOutside(event) {
       if (searchRef.current && !searchRef.current.contains(event.target)) {
@@ -71,7 +73,7 @@ function Navbar({
           <span>CINEMA-STREAM</span>
         </div>
 
-        {/* 🌟 Thanh Tìm Kiếm Mở Rộng + Gợi Ý Nhanh (Instant Search) */}
+        {/* Thanh Tìm Kiếm Mở Rộng + Gợi Ý Nhanh */}
         <div ref={searchRef} className="relative">
           <div
             onClick={() => {
@@ -120,10 +122,10 @@ function Navbar({
             )}
           </div>
 
-          {/* 📍 Dropdown hiển thị kết quả gợi ý nhanh giống Netflix/VieON */}
+          {/* Dropdown gợi ý phim */}
           {searchTerm && isSearchOpen && (
             <div
-              className={`absolute left-0 right-0 mt-2 rounded-2xl border shadow-2xl overflow-hidden z-50 animate-fadeIn ${
+              className={`absolute left-0 right-0 mt-2 rounded-2xl border shadow-2xl overflow-hidden z-50 ${
                 darkMode
                   ? "bg-slate-900 border-slate-800 text-white"
                   : "bg-white border-gray-200 text-slate-900"
@@ -153,12 +155,12 @@ function Navbar({
                     >
                       <img
                         src={movie.posterUrl}
-                        alt={movie.title}
+                        alt={movie.title || movie.name}
                         className="w-10 h-14 object-cover rounded-lg shadow"
                       />
                       <div className="flex-1 min-w-0">
                         <h4 className="text-xs font-bold truncate">
-                          {movie.title}
+                          {movie.title || movie.name}
                         </h4>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-[10px] bg-red-600/20 text-red-400 px-2 py-0.5 rounded font-medium">
@@ -178,9 +180,8 @@ function Navbar({
           )}
         </div>
 
-        {/* Khu vực bên phải (Theme, Yêu thích, Lịch sử, User) */}
+        {/* Khu vực bên phải */}
         <div className="flex items-center gap-3">
-          {/* Nút Đổi Dark / Light Mode */}
           <button
             onClick={() => setDarkMode(!darkMode)}
             className={`p-2 rounded-full transition cursor-pointer ${
@@ -188,9 +189,7 @@ function Navbar({
                 ? "bg-slate-800 text-amber-400 hover:bg-slate-700"
                 : "bg-slate-100 text-amber-500 hover:bg-slate-200"
             }`}
-            title={
-              darkMode ? "Chuyển sang chế độ Sáng" : "Chuyển sang chế độ Tối"
-            }
+            title="Chuyển chế độ sáng/tối"
           >
             {darkMode ? (
               <Sun className="w-5 h-5" />
@@ -199,7 +198,6 @@ function Navbar({
             )}
           </button>
 
-          {/* Nút Yêu thích */}
           <button
             onClick={() => setActiveTab("watchlist")}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold transition cursor-pointer ${
@@ -219,7 +217,6 @@ function Navbar({
             )}
           </button>
 
-          {/* Nút Lịch sử */}
           <button
             onClick={() => setActiveTab("history")}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold transition cursor-pointer ${
@@ -239,7 +236,6 @@ function Navbar({
             )}
           </button>
 
-          {/* User / Đăng nhập */}
           <div>
             {currentUser ? (
               <div className="flex items-center gap-3">
@@ -282,5 +278,3 @@ function Navbar({
     </nav>
   );
 }
-
-export default Navbar;

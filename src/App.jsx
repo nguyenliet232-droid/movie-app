@@ -213,6 +213,8 @@ function App() {
         setActiveTab={setActiveTab}
         darkMode={darkMode}
         setDarkMode={setDarkMode}
+        movies={movies} // <-- 1. Phải truyền danh sách phim vào đây
+        onSelectMovie={handleOpenWatchPage}
       />
 
       {/* 📍 NỘI DUNG HIỂN THỊ DỰA TRÊN TAB */}
