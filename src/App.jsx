@@ -5,7 +5,6 @@ import {
   History,
   User,
   Mail,
-  Shield,
   Film,
   ArrowLeft,
   Star,
@@ -171,7 +170,8 @@ function App() {
 
   // 1. Lọc theo từ khóa tìm kiếm và thể loại
   const filteredMovies = getDisplayMovies().filter((movie) => {
-    const matchesSearch = movie.title
+    const title = movie.title || movie.name || "";
+    const matchesSearch = title
       .toLowerCase()
       .includes(searchTerm.toLowerCase());
     const matchesCategory =
@@ -181,12 +181,14 @@ function App() {
 
   // 2. Sắp xếp nâng cao
   const sortedMovies = [...filteredMovies].sort((a, b) => {
+    const titleA = a.title || a.name || "";
+    const titleB = b.title || b.name || "";
     if (sortBy === "az") {
-      return a.title.localeCompare(b.title);
+      return titleA.localeCompare(titleB);
     } else if (sortBy === "rating") {
       return (b.rating || 5) - (a.rating || 5);
     } else {
-      return new Date(b.createdAt || 0) - new Date(b.createdAt || 0);
+      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
     }
   });
 
@@ -213,7 +215,7 @@ function App() {
         setActiveTab={setActiveTab}
         darkMode={darkMode}
         setDarkMode={setDarkMode}
-        movies={movies} // <-- 1. Phải truyền danh sách phim vào đây
+        movies={movies}
         onSelectMovie={handleOpenWatchPage}
       />
 
@@ -520,7 +522,6 @@ function App() {
                   for (let i = 0; i < localStorage.length; i++) {
                     const key = localStorage.key(i);
                     if (key && key.startsWith("movie_comments_")) {
-                      const movieId = key.replace("movie_comments_", "");
                       const comments = JSON.parse(
                         localStorage.getItem(key) || "[]",
                       );
@@ -529,7 +530,7 @@ function App() {
                           c.userName === currentUser.name ||
                           c.userEmail === currentUser.email
                         ) {
-                          userComments.push({ ...c, movieId });
+                          userComments.push(c);
                         }
                       });
                     }
@@ -567,7 +568,7 @@ function App() {
                                 darkMode ? "text-slate-400" : "text-gray-500"
                               }
                             >
-                              {item.createdAt || "Gần đây"}
+                              {item.date || "Gần đây"}
                             </span>
                           </div>
                           <p className="text-sm">{item.text}</p>
@@ -591,11 +592,11 @@ function App() {
                 bannerMovies[currentBannerIndex] || movies[0];
 
               return (
-                <div className="relative h-[480px] w-full bg-slate-900 overflow-hidden transition-all duration-700">
+                <div className="relative h-[400px] sm:h-[450px] md:h-[480px] w-full bg-slate-900 overflow-hidden transition-all duration-700">
                   <img
                     key={currentBannerMovie._id}
                     src={currentBannerMovie.posterUrl}
-                    alt={currentBannerMovie.title}
+                    alt={currentBannerMovie.title || currentBannerMovie.name}
                     className="w-full h-full object-cover opacity-35 blur-sm transition-opacity duration-1000 animate-fadeIn"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-transparent flex items-center">
@@ -604,7 +605,9 @@ function App() {
                         <img
                           key={`poster-${currentBannerMovie._id}`}
                           src={currentBannerMovie.posterUrl}
-                          alt={currentBannerMovie.title}
+                          alt={
+                            currentBannerMovie.title || currentBannerMovie.name
+                          }
                           className="w-48 h-72 rounded-xl object-cover shadow-2xl border-2 border-slate-700/50 hidden md:block animate-fadeIn"
                         />
                         <div
@@ -621,8 +624,9 @@ function App() {
                             </span>
                           </div>
 
-                          <h1 className="text-4xl font-extrabold text-white tracking-wide">
-                            {currentBannerMovie.title}
+                          <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-white tracking-wide line-clamp-2">
+                            {currentBannerMovie.title ||
+                              currentBannerMovie.name}
                           </h1>
 
                           <p className="text-slate-300 text-sm line-clamp-3 leading-relaxed">
@@ -942,7 +946,7 @@ function WatchPage({
         >
           Đang xem:{" "}
           <strong className={darkMode ? "text-white" : "text-slate-900"}>
-            {movie.title}
+            {movie.title || movie.name}
           </strong>
         </span>
       </div>
@@ -954,7 +958,7 @@ function WatchPage({
           {embedUrl.includes("youtube.com") ? (
             <iframe
               src={embedUrl}
-              title={movie.title}
+              title={movie.title || movie.name}
               className="w-full h-full absolute inset-0 border-0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
@@ -975,7 +979,9 @@ function WatchPage({
           <div className="lg:col-span-2 space-y-8">
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-4">
-                <h1 className="text-3xl font-extrabold">{movie.title}</h1>
+                <h1 className="text-3xl font-extrabold">
+                  {movie.title || movie.name}
+                </h1>
                 <span className="bg-red-600/20 text-red-400 border border-red-500/30 text-xs font-semibold px-3.5 py-1.5 rounded-full">
                   {movie.category || "Hành động"} ({movie.releaseYear || 2024})
                 </span>
@@ -1109,12 +1115,12 @@ function WatchPage({
                   >
                     <img
                       src={item.posterUrl}
-                      alt={item.title}
+                      alt={item.title || item.name}
                       className="w-16 h-20 object-cover rounded-lg shadow"
                     />
                     <div className="overflow-hidden space-y-1">
                       <h4 className="text-xs font-bold truncate">
-                        {item.title}
+                        {item.title || item.name}
                       </h4>
                       <span className="text-[10px] bg-red-600/20 text-red-400 px-2 py-0.5 rounded-md">
                         {item.category}
