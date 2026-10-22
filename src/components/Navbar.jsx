@@ -1,6 +1,8 @@
+import { useState, useRef, useEffect } from "react";
 import {
   Film,
   Search,
+  X,
   LogIn,
   LogOut,
   Heart,
@@ -22,9 +24,30 @@ function Navbar({
   darkMode,
   setDarkMode,
 }) {
+  // State quản lý trạng thái mở rộng của ô tìm kiếm
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const searchRef = useRef(null);
+
+  // Tự động thu gọn thanh tìm kiếm khi click ra ngoài nếu chưa nhập gì
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (searchRef.current && !searchRef.current.contains(event.target)) {
+        if (!searchTerm) {
+          setIsSearchOpen(false);
+        }
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [searchTerm]);
+
   return (
     <nav
-      className={`${darkMode ? "bg-slate-900/80 border-slate-800 text-white" : "bg-white/80 border-slate-200 text-slate-900"} backdrop-blur-md border-b sticky top-0 z-40 px-6 py-4 transition-colors`}
+      className={`${
+        darkMode
+          ? "bg-slate-900/80 border-slate-800 text-white"
+          : "bg-white/80 border-slate-200 text-slate-900"
+      } backdrop-blur-md border-b sticky top-0 z-40 px-6 py-4 transition-colors`}
     >
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
         {/* Logo */}
@@ -36,22 +59,54 @@ function Navbar({
           <span>CINEMA-STREAM</span>
         </div>
 
-        {/* Ô Tìm kiếm */}
-        <div className="relative flex-1 max-w-md hidden md:block">
-          <Search
-            className={`absolute left-3 top-2.5 w-5 h-5 ${darkMode ? "text-slate-400" : "text-slate-500"}`}
-          />
-          <input
-            type="text"
-            placeholder="Tìm kiếm phim..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className={`w-full border rounded-full pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-red-500 transition ${
-              darkMode
-                ? "bg-slate-800 border-slate-700 text-white"
-                : "bg-slate-100 border-slate-300 text-slate-900"
+        {/* 🌟 Thanh Tìm Kiếm Ẩn / Hiện Mở Rộng Mượt Mà (Giống Netflix) */}
+        <div ref={searchRef} className="relative flex items-center">
+          <div
+            onClick={() => {
+              if (!isSearchOpen) setIsSearchOpen(true);
+            }}
+            className={`flex items-center transition-all duration-300 rounded-full border cursor-pointer ${
+              isSearchOpen || searchTerm
+                ? "w-60 sm:w-72 px-3.5 py-2 bg-slate-900/90 border-red-500 shadow-lg shadow-red-600/20"
+                : "w-11 h-11 justify-center " +
+                  (darkMode
+                    ? "bg-slate-800 border-slate-700 hover:bg-slate-700"
+                    : "bg-slate-100 border-slate-300 hover:bg-slate-200")
             }`}
-          />
+          >
+            <Search
+              className={`w-5 h-5 transition-colors shrink-0 ${
+                isSearchOpen || searchTerm
+                  ? "text-red-500 mr-2"
+                  : darkMode
+                    ? "text-slate-400"
+                    : "text-slate-500"
+              }`}
+            />
+
+            {(isSearchOpen || searchTerm) && (
+              <input
+                type="text"
+                placeholder="Tìm kiếm phim, diễn viên..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                autoFocus
+                className="w-full bg-transparent text-xs text-white focus:outline-none placeholder-slate-400"
+              />
+            )}
+
+            {searchTerm && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSearchTerm("");
+                }}
+                className="text-slate-400 hover:text-white ml-1.5 cursor-pointer shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Khu vực bên phải */}
@@ -133,7 +188,11 @@ function Navbar({
                 </button>
                 <button
                   onClick={onLogout}
-                  className={`p-2 rounded-full transition cursor-pointer ${darkMode ? "bg-slate-800 hover:bg-slate-700 text-slate-300" : "bg-slate-100 hover:bg-slate-200 text-slate-700"}`}
+                  className={`p-2 rounded-full transition cursor-pointer ${
+                    darkMode
+                      ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                      : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                  }`}
                   title="Đăng xuất"
                 >
                   <LogOut className="w-5 h-5" />
