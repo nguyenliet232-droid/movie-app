@@ -9,6 +9,7 @@ import {
   History,
   Sun,
   Moon,
+  Play,
 } from "lucide-react";
 
 function Navbar({
@@ -23,12 +24,23 @@ function Navbar({
   setActiveTab,
   darkMode,
   setDarkMode,
+  movies = [], // Truyền danh sách phim vào Navbar để làm gợi ý nhanh
+  onSelectMovie, // Hàm mở trang xem phim khi click vào gợi ý
 }) {
-  // State quản lý trạng thái mở rộng của ô tìm kiếm
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const searchRef = useRef(null);
 
-  // Tự động thu gọn thanh tìm kiếm khi click ra ngoài nếu chưa nhập gì
+  // Lọc danh sách phim gợi ý dựa theo từ khóa tìm kiếm
+  const searchSuggestions =
+    searchTerm.trim() === ""
+      ? []
+      : movies
+          .filter((m) =>
+            m.title.toLowerCase().includes(searchTerm.toLowerCase()),
+          )
+          .slice(0, 5); // Hiển thị tối đa 5 kết quả gợi ý
+
+  // Đóng ô tìm kiếm và danh sách gợi ý khi click ra ngoài
   useEffect(() => {
     function handleClickOutside(event) {
       if (searchRef.current && !searchRef.current.contains(event.target)) {
@@ -45,9 +57,9 @@ function Navbar({
     <nav
       className={`${
         darkMode
-          ? "bg-slate-900/80 border-slate-800 text-white"
-          : "bg-white/80 border-slate-200 text-slate-900"
-      } backdrop-blur-md border-b sticky top-0 z-40 px-6 py-4 transition-colors`}
+          ? "bg-slate-900/90 border-slate-800 text-white"
+          : "bg-white/90 border-slate-200 text-slate-900"
+      } backdrop-blur-md border-b sticky top-0 z-50 px-6 py-4 transition-colors`}
     >
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
         {/* Logo */}
@@ -59,15 +71,15 @@ function Navbar({
           <span>CINEMA-STREAM</span>
         </div>
 
-        {/* 🌟 Thanh Tìm Kiếm Ẩn / Hiện Mở Rộng Mượt Mà (Giống Netflix) */}
-        <div ref={searchRef} className="relative flex items-center">
+        {/* 🌟 Thanh Tìm Kiếm Mở Rộng + Gợi Ý Nhanh (Instant Search) */}
+        <div ref={searchRef} className="relative">
           <div
             onClick={() => {
               if (!isSearchOpen) setIsSearchOpen(true);
             }}
             className={`flex items-center transition-all duration-300 rounded-full border cursor-pointer ${
               isSearchOpen || searchTerm
-                ? "w-60 sm:w-72 px-3.5 py-2 bg-slate-900/90 border-red-500 shadow-lg shadow-red-600/20"
+                ? "w-64 sm:w-80 px-3.5 py-2 bg-slate-900/95 border-red-500 shadow-xl shadow-red-600/20"
                 : "w-11 h-11 justify-center " +
                   (darkMode
                     ? "bg-slate-800 border-slate-700 hover:bg-slate-700"
@@ -107,9 +119,66 @@ function Navbar({
               </button>
             )}
           </div>
+
+          {/* 📍 Dropdown hiển thị kết quả gợi ý nhanh giống Netflix/VieON */}
+          {searchTerm && isSearchOpen && (
+            <div
+              className={`absolute left-0 right-0 mt-2 rounded-2xl border shadow-2xl overflow-hidden z-50 animate-fadeIn ${
+                darkMode
+                  ? "bg-slate-900 border-slate-800 text-white"
+                  : "bg-white border-gray-200 text-slate-900"
+              }`}
+            >
+              <div className="p-2.5 border-b border-slate-800/60 text-[11px] font-semibold text-slate-400 flex justify-between items-center">
+                <span>GỢI Ý TỪ KHÓA & PHIM</span>
+                <span>{searchSuggestions.length} kết quả</span>
+              </div>
+
+              {searchSuggestions.length === 0 ? (
+                <div className="p-4 text-center text-xs text-slate-400">
+                  Không tìm thấy bộ phim phù hợp với "{searchTerm}"
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-800/40">
+                  {searchSuggestions.map((movie) => (
+                    <div
+                      key={movie._id}
+                      onClick={() => {
+                        if (onSelectMovie) onSelectMovie(movie);
+                        setIsSearchOpen(false);
+                      }}
+                      className={`flex items-center gap-3 p-2.5 transition cursor-pointer ${
+                        darkMode ? "hover:bg-slate-800/80" : "hover:bg-gray-100"
+                      }`}
+                    >
+                      <img
+                        src={movie.posterUrl}
+                        alt={movie.title}
+                        className="w-10 h-14 object-cover rounded-lg shadow"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-xs font-bold truncate">
+                          {movie.title}
+                        </h4>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] bg-red-600/20 text-red-400 px-2 py-0.5 rounded font-medium">
+                            {movie.category || "Phim"}
+                          </span>
+                          <span className="text-[10px] text-slate-400">
+                            {movie.releaseYear || 2024}
+                          </span>
+                        </div>
+                      </div>
+                      <Play className="w-4 h-4 text-red-500 fill-red-500 shrink-0 opacity-80" />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Khu vực bên phải */}
+        {/* Khu vực bên phải (Theme, Yêu thích, Lịch sử, User) */}
         <div className="flex items-center gap-3">
           {/* Nút Đổi Dark / Light Mode */}
           <button
