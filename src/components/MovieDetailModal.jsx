@@ -2,21 +2,14 @@ import { useState, useEffect } from "react";
 import { X, Star, Send, MessageSquare } from "lucide-react";
 
 function MovieDetailModal({ movie, onClose, onAddToHistory, currentUser }) {
-  const [reviews, setReviews] = useState([]);
-  const [rating, setRating] = useState(5);
-  const [comment, setComment] = useState("");
-
-  // ✅ ĐẶT TẤT CẢ HOOKS LÊN TRÊN CÙNG (Trước mọi câu lệnh return)
-  useEffect(() => {
-    if (movie) {
-      if (onAddToHistory) onAddToHistory(movie);
-
-      // Đồng bộ key thành 'movie_comments_' để khớp với Tab Quản lý Bình Luận ở App.jsx
-      const savedReviews = localStorage.getItem(`movie_comments_${movie._id}`);
-      if (savedReviews) {
-        setReviews(JSON.parse(savedReviews));
-      } else {
-        setReviews([
+  const loadReviews = (targetMovie) => {
+    if (!targetMovie) return [];
+    const savedReviews = localStorage.getItem(
+      `movie_comments_${targetMovie._id}`,
+    );
+    return savedReviews
+      ? JSON.parse(savedReviews)
+      : [
           {
             id: 1,
             userName: "Nguyễn Văn A",
@@ -33,12 +26,23 @@ function MovieDetailModal({ movie, onClose, onAddToHistory, currentUser }) {
             text: "Kỹ xảo đẹp, âm thanh sống động.",
             date: "14/05/2026",
           },
-        ]);
-      }
-    }
-  }, [movie]);
+        ];
+  };
+  const [reviewState, setReviewState] = useState(() => ({
+    movieId: movie?._id,
+    reviews: loadReviews(movie),
+  }));
+  const reviews =
+    reviewState.movieId === movie?._id
+      ? reviewState.reviews
+      : loadReviews(movie);
+  const [rating, setRating] = useState(5);
+  const [comment, setComment] = useState("");
 
-  // Sau khi khai báo xong hết các Hooks thì mới được dùng return điều kiện
+  useEffect(() => {
+    if (movie && onAddToHistory) onAddToHistory(movie);
+  }, [movie, onAddToHistory]);
+
   if (!movie) return null;
 
   // Gửi bình luận mới
@@ -61,7 +65,7 @@ function MovieDetailModal({ movie, onClose, onAddToHistory, currentUser }) {
     };
 
     const updatedReviews = [newReview, ...reviews];
-    setReviews(updatedReviews);
+    setReviewState({ movieId: movie._id, reviews: updatedReviews });
     localStorage.setItem(
       `movie_comments_${movie._id}`,
       JSON.stringify(updatedReviews),

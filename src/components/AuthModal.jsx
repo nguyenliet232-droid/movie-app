@@ -75,7 +75,7 @@ function AuthModal({ isOpen, onClose, onLoginSuccess }) {
           text: data.message || "Đăng nhập thất bại!",
         });
       }
-    } catch (err) {
+    } catch {
       setMessage({ type: "error", text: "Lỗi kết nối máy chủ!" });
     } finally {
       setLoading(false);
@@ -117,7 +117,7 @@ function AuthModal({ isOpen, onClose, onLoginSuccess }) {
           text: data.message || "Không thể gửi OTP!",
         });
       }
-    } catch (err) {
+    } catch {
       setMessage({ type: "error", text: "Lỗi kết nối máy chủ!" });
     } finally {
       setLoading(false);
@@ -153,7 +153,7 @@ function AuthModal({ isOpen, onClose, onLoginSuccess }) {
           text: data.message || "Mã OTP không đúng hoặc đã hết hạn!",
         });
       }
-    } catch (err) {
+    } catch {
       setMessage({ type: "error", text: "Lỗi kết nối máy chủ!" });
     } finally {
       setLoading(false);
@@ -186,7 +186,7 @@ function AuthModal({ isOpen, onClose, onLoginSuccess }) {
           text: data.message || "Không thể gửi yêu cầu quên mật khẩu!",
         });
       }
-    } catch (err) {
+    } catch {
       setMessage({ type: "error", text: "Lỗi kết nối máy chủ!" });
     } finally {
       setLoading(false);
@@ -222,7 +222,7 @@ function AuthModal({ isOpen, onClose, onLoginSuccess }) {
           text: data.message || "Mã OTP không hợp lệ hoặc đã hết hạn!",
         });
       }
-    } catch (err) {
+    } catch {
       setMessage({ type: "error", text: "Lỗi kết nối máy chủ!" });
     } finally {
       setLoading(false);

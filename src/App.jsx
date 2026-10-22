@@ -81,6 +81,20 @@ function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const moviesPerPage = 10;
 
+  // 🌟 State quản lý vị trí Banner tự động chạy xoay vòng (cứ 6 giây đổi phim)
+  const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+
+  useEffect(() => {
+    if (!movies || movies.length === 0) return;
+    const interval = setInterval(() => {
+      setCurrentBannerIndex(
+        (prevIndex) => (prevIndex + 1) % Math.min(movies.length, 5),
+      );
+    }, 6000); // 6 giây
+
+    return () => clearInterval(interval);
+  }, [movies]);
+
   useEffect(() => {
     const fetchMovies = async () => {
       try {
@@ -203,12 +217,13 @@ function App() {
 
       {/* 📍 NỘI DUNG HIỂN THỊ DỰA TRÊN TAB */}
       {activeTab === "watch" && selectedMovie ? (
-        /* 🌟 TRANG XEM PHIM RIÊNG BIỆT (DEDICATED WATCH PAGE) */
         <WatchPage
           movie={selectedMovie}
           onBack={() => setActiveTab("home")}
           currentUser={currentUser}
           onAddToHistory={handleAddToHistory}
+          allMovies={movies}
+          onSelectMovie={handleOpenWatchPage}
           darkMode={darkMode}
         />
       ) : activeTab === "profile" ? (
@@ -565,43 +580,86 @@ function App() {
         </div>
       ) : (
         <>
-          {activeTab === "home" && movies.length > 0 && (
-            <div className="relative h-[450px] w-full bg-slate-900 overflow-hidden">
-              <img
-                src={movies[0].posterUrl}
-                alt={movies[0].title}
-                className="w-full h-full object-cover opacity-30 blur-sm"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-transparent flex items-center">
-                <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center gap-8">
+          {/* 🌟 BANNER TỰ ĐỘNG CHUYỂN ĐỔI SAU MỖI 6 GIÂY */}
+          {activeTab === "home" &&
+            movies.length > 0 &&
+            (() => {
+              const bannerMovies = movies.slice(0, 5);
+              const currentBannerMovie =
+                bannerMovies[currentBannerIndex] || movies[0];
+
+              return (
+                <div className="relative h-[480px] w-full bg-slate-900 overflow-hidden transition-all duration-700">
                   <img
-                    src={movies[0].posterUrl}
-                    alt={movies[0].title}
-                    className="w-48 h-72 rounded-xl object-cover shadow-2xl border-2 border-slate-700/50 hidden md:block"
+                    key={currentBannerMovie._id}
+                    src={currentBannerMovie.posterUrl}
+                    alt={currentBannerMovie.title}
+                    className="w-full h-full object-cover opacity-35 blur-sm transition-opacity duration-1000 animate-fadeIn"
                   />
-                  <div className="space-y-4 max-w-xl">
-                    <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-semibold px-3 py-1 rounded-full">
-                      Phim Nổi Bật
-                    </span>
-                    <h1 className="text-4xl font-extrabold text-white">
-                      {movies[0].title}
-                    </h1>
-                    <p className="text-slate-300 text-sm line-clamp-3">
-                      {movies[0].description ||
-                        "Chưa có mô tả cho bộ phim này."}
-                    </p>
-                    <button
-                      onClick={() => handleOpenWatchPage(movies[0])}
-                      className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-3 rounded-xl transition shadow-lg shadow-red-600/30 cursor-pointer"
-                    >
-                      <Play className="w-5 h-5 fill-current" />
-                      <span>Xem Phim Ngay</span>
-                    </button>
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-transparent flex items-center">
+                    <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center gap-8 w-full justify-between">
+                      <div className="flex items-center gap-8">
+                        <img
+                          key={`poster-${currentBannerMovie._id}`}
+                          src={currentBannerMovie.posterUrl}
+                          alt={currentBannerMovie.title}
+                          className="w-48 h-72 rounded-xl object-cover shadow-2xl border-2 border-slate-700/50 hidden md:block animate-fadeIn"
+                        />
+                        <div
+                          className="space-y-4 max-w-xl animate-fadeIn"
+                          key={`info-${currentBannerMovie._id}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-semibold px-3 py-1 rounded-full">
+                              🔥 Phim Nổi Bật ({currentBannerIndex + 1}/
+                              {bannerMovies.length})
+                            </span>
+                            <span className="text-xs text-slate-300 bg-slate-800/60 px-2.5 py-1 rounded-md border border-slate-700">
+                              {currentBannerMovie.category || "Hành động"}
+                            </span>
+                          </div>
+
+                          <h1 className="text-4xl font-extrabold text-white tracking-wide">
+                            {currentBannerMovie.title}
+                          </h1>
+
+                          <p className="text-slate-300 text-sm line-clamp-3 leading-relaxed">
+                            {currentBannerMovie.description ||
+                              "Chưa có mô tả cho bộ phim này."}
+                          </p>
+
+                          <button
+                            onClick={() =>
+                              handleOpenWatchPage(currentBannerMovie)
+                            }
+                            className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-3 rounded-xl transition shadow-lg shadow-red-600/30 cursor-pointer"
+                          >
+                            <Play className="w-5 h-5 fill-current" />
+                            <span>Xem Phim Ngay</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Các chấm tròn điều hướng thủ công */}
+                      <div className="flex md:flex-col gap-2 items-center justify-center">
+                        {bannerMovies.map((_, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => setCurrentBannerIndex(idx)}
+                            className={`transition-all duration-300 rounded-full cursor-pointer ${
+                              currentBannerIndex === idx
+                                ? "w-8 h-2.5 bg-red-600"
+                                : "w-2.5 h-2.5 bg-slate-600 hover:bg-slate-400"
+                            }`}
+                            aria-label={`Chuyển banner ${idx + 1}`}
+                          />
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
-          )}
+              );
+            })()}
 
           {/* 📍 THANH LỌC THỂ LOẠI NÂNG CAO & SẮP XẾP */}
           {activeTab === "home" && (
@@ -778,7 +836,15 @@ function App() {
 // ========================================================
 // 🌟 COMPONENT: TRANG XEM PHIM RIÊNG BIỆT (DEDICATED WATCH PAGE)
 // ========================================================
-function WatchPage({ movie, onBack, currentUser, onAddToHistory, darkMode }) {
+function WatchPage({
+  movie,
+  onBack,
+  currentUser,
+  onAddToHistory,
+  allMovies,
+  onSelectMovie,
+  darkMode,
+}) {
   const [reviews, setReviews] = useState([]);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
@@ -786,7 +852,7 @@ function WatchPage({ movie, onBack, currentUser, onAddToHistory, darkMode }) {
   useEffect(() => {
     if (movie) {
       if (onAddToHistory) onAddToHistory(movie);
-      window.scrollTo(0, 0);
+      window.scrollTo({ top: 0, behavior: "smooth" });
 
       // Tải bình luận của phim từ localStorage
       const savedReviews = localStorage.getItem(`movie_comments_${movie._id}`);
@@ -807,6 +873,13 @@ function WatchPage({ movie, onBack, currentUser, onAddToHistory, darkMode }) {
   }, [movie]);
 
   if (!movie) return null;
+
+  // Lọc phim liên quan (cùng thể loại, khác ID phim hiện tại)
+  const relatedMovies = allMovies
+    ? allMovies
+        .filter((m) => m.category === movie.category && m._id !== movie._id)
+        .slice(0, 5)
+    : [];
 
   // Xử lý link nhúng YouTube tối ưu
   const getEmbedUrl = (url) => {
@@ -852,7 +925,7 @@ function WatchPage({ movie, onBack, currentUser, onAddToHistory, darkMode }) {
 
   return (
     <div
-      className={`min-h-screen ${darkMode ? "bg-slate-950 text-white" : "bg-gray-50 text-slate-900"} pb-16`}
+      className={`min-h-screen ${darkMode ? "bg-slate-950 text-white" : "bg-gray-50 text-slate-900"} pb-16 animate-fadeIn`}
     >
       {/* 📍 Thanh điều hướng quay lại */}
       <div className="max-w-7xl mx-auto px-6 py-4 flex items-center gap-4">
@@ -872,9 +945,10 @@ function WatchPage({ movie, onBack, currentUser, onAddToHistory, darkMode }) {
         </span>
       </div>
 
-      {/* 📍 Trình phát video kích thước lớn chiếm trọn tầm nhìn */}
-      <div className="max-w-6xl mx-auto px-6">
-        <div className="aspect-video w-full bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 relative">
+      {/* 📍 Khung chính chứa Video và Phim đề xuất bên cạnh */}
+      <div className="max-w-7xl mx-auto px-6">
+        {/* Trình phát video kích thước lớn */}
+        <div className="aspect-video w-full bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 relative mb-8">
           {embedUrl.includes("youtube.com") ? (
             <iframe
               src={embedUrl}
@@ -893,114 +967,166 @@ function WatchPage({ movie, onBack, currentUser, onAddToHistory, darkMode }) {
           )}
         </div>
 
-        {/* Thông tin chi tiết & Bình luận bên dưới */}
-        <div className="mt-8 space-y-8">
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <h1 className="text-3xl font-extrabold">{movie.title}</h1>
-              <span className="bg-red-600/20 text-red-400 border border-red-500/30 text-xs font-semibold px-3.5 py-1.5 rounded-full">
-                {movie.category || "Hành động"} ({movie.releaseYear || 2024})
-              </span>
+        {/* Chia lưới 2 cột: Cột trái (Thông tin + Bình luận) | Cột phải (Phim đề xuất) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* CỘT TRÁI: Thông tin phim & Bình luận (Chiếm 2 phần) */}
+          <div className="lg:col-span-2 space-y-8">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <h1 className="text-3xl font-extrabold">{movie.title}</h1>
+                <span className="bg-red-600/20 text-red-400 border border-red-500/30 text-xs font-semibold px-3.5 py-1.5 rounded-full">
+                  {movie.category || "Hành động"} ({movie.releaseYear || 2024})
+                </span>
+              </div>
+              <p
+                className={`text-sm leading-relaxed ${darkMode ? "text-slate-300" : "text-gray-600"}`}
+              >
+                {movie.description || "Chưa có mô tả chi tiết cho bộ phim này."}
+              </p>
             </div>
-            <p
-              className={`text-sm leading-relaxed ${darkMode ? "text-slate-300" : "text-gray-600"}`}
+
+            {/* Phần Đánh giá & Bình luận */}
+            <div
+              className={`border-t ${darkMode ? "border-slate-800" : "border-gray-200"} pt-8 space-y-6`}
             >
-              {movie.description || "Chưa có mô tả chi tiết cho bộ phim này."}
-            </p>
+              <h3 className="text-xl font-bold flex items-center gap-2 text-red-500">
+                <MessageSquare className="w-5 h-5" /> Đánh Giá & Bình Luận (
+                {reviews.length})
+              </h3>
+
+              {/* Form viết đánh giá */}
+              <form
+                onSubmit={handleAddReview}
+                className={`${darkMode ? "bg-slate-900 border-slate-800" : "bg-white border-gray-200 shadow-md"} p-5 rounded-2xl border space-y-4`}
+              >
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`text-xs font-medium ${darkMode ? "text-slate-300" : "text-gray-700"}`}
+                  >
+                    Chấm điểm phim:
+                  </span>
+                  <select
+                    value={rating}
+                    onChange={(e) => setRating(e.target.value)}
+                    className={`border rounded-xl px-3 py-1.5 text-xs text-amber-400 font-bold focus:outline-none cursor-pointer ${
+                      darkMode
+                        ? "bg-slate-800 border-slate-700"
+                        : "bg-gray-100 border-gray-300"
+                    }`}
+                  >
+                    <option value="5">⭐⭐⭐⭐⭐ (5/5)</option>
+                    <option value="4">⭐⭐⭐⭐ (4/5)</option>
+                    <option value="3">⭐⭐⭐ (3/5)</option>
+                    <option value="2">⭐⭐ (2/5)</option>
+                    <option value="1">⭐ (1/5)</option>
+                  </select>
+                </div>
+
+                <textarea
+                  rows="3"
+                  placeholder={
+                    currentUser
+                      ? "Cảm nghĩ của bạn về bộ phim này..."
+                      : "Vui lòng đăng nhập để viết bình luận..."
+                  }
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  disabled={!currentUser}
+                  className={`w-full border rounded-xl p-4 text-sm focus:outline-none focus:border-red-500 disabled:opacity-50 ${
+                    darkMode
+                      ? "bg-slate-950 border-slate-800 text-white"
+                      : "bg-gray-50 border-gray-300 text-slate-900"
+                  }`}
+                ></textarea>
+
+                <div className="flex justify-between items-center">
+                  {!currentUser && (
+                    <span className="text-xs text-amber-400">
+                      ⚠️ Bạn cần đăng nhập để gửi bình luận.
+                    </span>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={!currentUser}
+                    className="ml-auto flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-2.5 rounded-xl text-xs transition disabled:opacity-50 cursor-pointer shadow-lg shadow-red-600/30"
+                  >
+                    <Send className="w-4 h-4" /> Gửi Bình Luận
+                  </button>
+                </div>
+              </form>
+
+              {/* Danh sách bình luận */}
+              <div className="space-y-4">
+                {reviews.map((rev) => (
+                  <div
+                    key={rev.id}
+                    className={`${darkMode ? "bg-slate-900/60 border-slate-800/80 text-slate-300" : "bg-white border-gray-200 text-slate-700 shadow-sm"} p-4 rounded-2xl border space-y-2`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-sm text-red-500">
+                        {rev.userName}
+                      </span>
+                      <span className="text-xs text-slate-400">{rev.date}</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-amber-400 text-xs">
+                      {[...Array(Number(rev.rating))].map((_, i) => (
+                        <Star key={i} className="w-3.5 h-3.5 fill-current" />
+                      ))}
+                    </div>
+                    <p className="text-sm">{rev.text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
-          {/* Phần Đánh giá & Bình luận */}
-          <div
-            className={`border-t ${darkMode ? "border-slate-800" : "border-gray-200"} pt-8 space-y-6`}
-          >
-            <h3 className="text-xl font-bold flex items-center gap-2 text-red-500">
-              <MessageSquare className="w-5 h-5" /> Đánh Giá & Bình Luận (
-              {reviews.length})
+          {/* CỘT PHẢI: PHIM ĐỀ XUẤT CÙNG THỂ LOẠI (Chiếm 1 phần) */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-bold text-red-500 flex items-center gap-2">
+              🔥 Phim Đề Xuất Cùng Thể Loại
             </h3>
-
-            {/* Form viết đánh giá */}
-            <form
-              onSubmit={handleAddReview}
-              className={`${darkMode ? "bg-slate-900 border-slate-800" : "bg-white border-gray-200 shadow-md"} p-5 rounded-2xl border space-y-4`}
-            >
-              <div className="flex items-center gap-3">
-                <span
-                  className={`text-xs font-medium ${darkMode ? "text-slate-300" : "text-gray-700"}`}
-                >
-                  Chấm điểm phim:
-                </span>
-                <select
-                  value={rating}
-                  onChange={(e) => setRating(e.target.value)}
-                  className={`border rounded-xl px-3 py-1.5 text-xs text-amber-400 font-bold focus:outline-none cursor-pointer ${
-                    darkMode
-                      ? "bg-slate-800 border-slate-700"
-                      : "bg-gray-100 border-gray-300"
-                  }`}
-                >
-                  <option value="5">⭐⭐⭐⭐⭐ (5/5)</option>
-                  <option value="4">⭐⭐⭐⭐ (4/5)</option>
-                  <option value="3">⭐⭐⭐ (3/5)</option>
-                  <option value="2">⭐⭐ (2/5)</option>
-                  <option value="1">⭐ (1/5)</option>
-                </select>
-              </div>
-
-              <textarea
-                rows="3"
-                placeholder={
-                  currentUser
-                    ? "Cảm nghĩ của bạn về bộ phim này..."
-                    : "Vui lòng đăng nhập để viết bình luận..."
-                }
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                disabled={!currentUser}
-                className={`w-full border rounded-xl p-4 text-sm focus:outline-none focus:border-red-500 disabled:opacity-50 ${
-                  darkMode
-                    ? "bg-slate-950 border-slate-800 text-white"
-                    : "bg-gray-50 border-gray-300 text-slate-900"
-                }`}
-              ></textarea>
-
-              <div className="flex justify-between items-center">
-                {!currentUser && (
-                  <span className="text-xs text-amber-400">
-                    ⚠️ Bạn cần đăng nhập để gửi bình luận.
-                  </span>
-                )}
-                <button
-                  type="submit"
-                  disabled={!currentUser}
-                  className="ml-auto flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-2.5 rounded-xl text-xs transition disabled:opacity-50 cursor-pointer shadow-lg shadow-red-600/30"
-                >
-                  <Send className="w-4 h-4" /> Gửi Bình Luận
-                </button>
-              </div>
-            </form>
-
-            {/* Danh sách bình luận */}
-            <div className="space-y-4">
-              {reviews.map((rev) => (
-                <div
-                  key={rev.id}
-                  className={`${darkMode ? "bg-slate-900/60 border-slate-800/80 text-slate-300" : "bg-white border-gray-200 text-slate-700 shadow-sm"} p-4 rounded-2xl border space-y-2`}
-                >
-                  <div className="flex justify-between items-center">
-                    <span className="font-bold text-sm text-red-500">
-                      {rev.userName}
-                    </span>
-                    <span className="text-xs text-slate-400">{rev.date}</span>
+            {relatedMovies.length === 0 ? (
+              <p
+                className={`text-xs ${darkMode ? "text-slate-500" : "text-gray-400"}`}
+              >
+                Chưa có phim gợi ý nào khác trong thể loại này.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {relatedMovies.map((item) => (
+                  <div
+                    key={item._id}
+                    onClick={() => {
+                      if (onSelectMovie) onSelectMovie(item);
+                    }}
+                    className={`flex items-center gap-3 p-2.5 rounded-xl border cursor-pointer transition-all hover:scale-[1.02] ${
+                      darkMode
+                        ? "bg-slate-900 border-slate-800 hover:border-red-500/50 text-white"
+                        : "bg-white border-gray-200 shadow-sm text-slate-900"
+                    }`}
+                  >
+                    <img
+                      src={item.posterUrl}
+                      alt={item.title}
+                      className="w-16 h-20 object-cover rounded-lg shadow"
+                    />
+                    <div className="overflow-hidden space-y-1">
+                      <h4 className="text-xs font-bold truncate">
+                        {item.title}
+                      </h4>
+                      <span className="text-[10px] bg-red-600/20 text-red-400 px-2 py-0.5 rounded-md">
+                        {item.category}
+                      </span>
+                      <p
+                        className={`text-[11px] line-clamp-1 ${darkMode ? "text-slate-400" : "text-gray-500"}`}
+                      >
+                        {item.description || "Không có mô tả"}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1 text-amber-400 text-xs">
-                    {[...Array(Number(rev.rating))].map((_, i) => (
-                      <Star key={i} className="w-3.5 h-3.5 fill-current" />
-                    ))}
-                  </div>
-                  <p className="text-sm">{rev.text}</p>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
