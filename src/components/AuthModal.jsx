@@ -9,8 +9,8 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-
-const API_URL = "https://user-management-backend-7clg.onrender.com/api";
+import { GoogleLogin } from "@react-oauth/google";
+import { API_URL } from "../utils/api";
 
 function AuthModal({ isOpen, onClose, onLoginSuccess }) {
   // Chế độ hiển thị: 'login' | 'register-1' | 'register-2' | 'forgot-1' | 'forgot-2'
@@ -269,68 +269,128 @@ function AuthModal({ isOpen, onClose, onLoginSuccess }) {
 
         {/* 1. FORM ĐĂNG NHẬP */}
         {view === "login" && (
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">Email</label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
-                <input
-                  type="email"
-                  required
-                  placeholder="yourname@gmail.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-red-500"
-                />
+          <>
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Email
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                  <input
+                    type="email"
+                    required
+                    placeholder="yourname@gmail.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-red-500"
+                  />
+                </div>
               </div>
-            </div>
 
-            <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="text-xs text-slate-400">Mật khẩu</label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setView("forgot-1");
-                    setMessage({ type: "", text: "" });
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-xs text-slate-400">Mật khẩu</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setView("forgot-1");
+                      setMessage({ type: "", text: "" });
+                    }}
+                    className="text-xs text-red-400 hover:underline cursor-pointer"
+                  >
+                    Quên mật khẩu?
+                  </button>
+                </div>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-10 pr-10 py-2.5 text-sm focus:outline-none focus:border-red-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2.5 rounded-xl transition mt-2 text-sm disabled:opacity-50 cursor-pointer"
+              >
+                {loading ? "⏳ Đang xử lý..." : "Đăng Nhập"}
+              </button>
+            </form>
+
+            {/* 🌟 Nút Đăng nhập Google */}
+            <div className="mt-6 space-y-4">
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-slate-800"></div>
+                <span className="flex-shrink mx-4 text-xs text-slate-500">
+                  Hoặc tiếp tục với
+                </span>
+                <div className="flex-grow border-t border-slate-800"></div>
+              </div>
+
+              <div className="flex justify-center w-full">
+                <GoogleLogin
+                  onSuccess={async (credentialResponse) => {
+                    try {
+                      setLoading(true);
+                      const res = await fetch(`${API_URL}/auth/google`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          token: credentialResponse.credential,
+                        }),
+                      });
+                      const data = await res.json();
+                      if (res.ok) {
+                        localStorage.setItem("movie_token", data.token);
+                        localStorage.setItem(
+                          "movie_user",
+                          JSON.stringify(data.user),
+                        );
+                        onLoginSuccess(data.user);
+                        handleClose();
+                      } else {
+                        setMessage({
+                          type: "error",
+                          text: data.message || "Đăng nhập Google thất bại!",
+                        });
+                      }
+                    } catch {
+                      setMessage({
+                        type: "error",
+                        text: "Lỗi kết nối máy chủ!",
+                      });
+                    } finally {
+                      setLoading(false);
+                    }
                   }}
-                  className="text-xs text-red-400 hover:underline cursor-pointer"
-                >
-                  Quên mật khẩu?
-                </button>
-              </div>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  required
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-10 pr-10 py-2.5 text-sm focus:outline-none focus:border-red-500"
+                  onError={() => {
+                    setMessage({
+                      type: "error",
+                      text: "Đăng nhập Google thất bại!",
+                    });
+                  }}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-3 text-slate-400 hover:text-white cursor-pointer"
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
-                </button>
               </div>
             </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-2.5 rounded-xl transition mt-2 text-sm disabled:opacity-50 cursor-pointer"
-            >
-              {loading ? "⏳ Đang xử lý..." : "Đăng Nhập"}
-            </button>
-          </form>
+          </>
         )}
 
         {/* 2. FORM ĐĂNG KÝ - BƯỚC 1 */}

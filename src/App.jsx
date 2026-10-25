@@ -1,30 +1,45 @@
-import { useState, useEffect, useCallback } from "react";
-import { Play, History, User, Mail } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Play, History, User } from "lucide-react";
 import Navbar from "./components/Navbar";
 import MovieCard from "./components/MovieCard";
 import SkeletonCard from "./components/SkeletonCard";
 import AuthModal from "./components/AuthModal";
 import WatchPage from "./components/WatchPage";
-
-const API_URL = "https://user-management-backend-7clg.onrender.com/api";
+import { API_URL } from "./utils/api";
+import { readJsonStorage } from "./utils/storage";
 
 function App() {
+  const avatarFileInputRef = useRef(null);
   const [movies, setMovies] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState(() => {
-    const savedUser = localStorage.getItem("movie_user");
-    return savedUser ? JSON.parse(savedUser) : null;
-  });
+  const [moviesError, setMoviesError] = useState("");
+  const [currentUser, setCurrentUser] = useState(() =>
+    readJsonStorage(
+      "movie_user",
+      null,
+      (value) =>
+        value === null || (typeof value === "object" && !Array.isArray(value)),
+    ),
+  );
+  const [profileName, setProfileName] = useState(() => currentUser?.name || "");
+  const [profileAvatar, setProfileAvatar] = useState(
+    () => currentUser?.avatar || "",
+  );
+  const [hasProfileAvatarError, setHasProfileAvatarError] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [selectedMovie, setSelectedMovie] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("home"); // "home", "watchlist", "history", "profile", "my-comments", "watch"
 
   // 🌟 State quản lý chế độ Sáng / Tối
-  const [darkMode, setDarkMode] = useState(() => {
-    const savedMode = localStorage.getItem("movie_dark_mode");
-    return savedMode !== null ? JSON.parse(savedMode) : true;
-  });
+  const [darkMode, setDarkMode] = useState(() =>
+    readJsonStorage(
+      "movie_dark_mode",
+      true,
+      (value) => typeof value === "boolean",
+    ),
+  );
 
   useEffect(() => {
     localStorage.setItem("movie_dark_mode", JSON.stringify(darkMode));
@@ -45,16 +60,14 @@ function App() {
   };
 
   // 🌟 Quản lý danh sách Yêu thích
-  const [favorites, setFavorites] = useState(() => {
-    const savedFavs = localStorage.getItem("movie_favorites");
-    return savedFavs ? JSON.parse(savedFavs) : [];
-  });
+  const [favorites, setFavorites] = useState(() =>
+    readJsonStorage("movie_favorites", [], Array.isArray),
+  );
 
   // 🌟 Quản lý Lịch sử xem (Continue Watching)
-  const [watchHistory, setWatchHistory] = useState(() => {
-    const savedHistory = localStorage.getItem("movie_watch_history");
-    return savedHistory ? JSON.parse(savedHistory) : [];
-  });
+  const [watchHistory, setWatchHistory] = useState(() =>
+    readJsonStorage("movie_watch_history", [], Array.isArray),
+  );
 
   // 🌟 Quản lý thể loại đang chọn
   const [selectedCategory, setSelectedCategory] = useState("Tất cả");
@@ -102,10 +115,21 @@ function App() {
     const fetchMovies = async () => {
       try {
         const res = await fetch(`${API_URL}/movies`);
+        if (!res.ok) {
+          throw new Error(`Movie request failed with status ${res.status}.`);
+        }
+
         const data = await res.json();
-        if (res.ok) setMovies(data);
+        if (!Array.isArray(data)) {
+          throw new TypeError("Movie API returned an invalid response.");
+        }
+
+        setMovies(data);
       } catch (err) {
         console.error("Lỗi lấy danh sách phim:", err);
+        setMoviesError(
+          "Không thể tải danh sách phim. Vui lòng thử tải lại trang.",
+        );
       } finally {
         setLoading(false);
       }
@@ -113,6 +137,34 @@ function App() {
 
     fetchMovies();
   }, []);
+
+  // 🌟 Đồng bộ dữ liệu Yêu thích và Lịch sử từ MongoDB khi có user đăng nhập
+  useEffect(() => {
+    const fetchUserDataFromDB = async () => {
+      const token = localStorage.getItem("movie_token");
+      if (!token || !currentUser) {
+        // Nếu đăng xuất, xóa sạch state
+        setFavorites([]);
+        setWatchHistory([]);
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_URL}/users/sync-data`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setFavorites(data.favorites || []);
+          setWatchHistory(data.watchHistory || []);
+        }
+      } catch (err) {
+        console.error("Lỗi đồng bộ dữ liệu từ database:", err);
+      }
+    };
+
+    fetchUserDataFromDB();
+  }, [currentUser]);
 
   useEffect(() => {
     localStorage.setItem("movie_favorites", JSON.stringify(favorites));
@@ -125,30 +177,84 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem("movie_user");
     localStorage.removeItem("movie_token");
+    localStorage.removeItem("movie_favorites");
+    localStorage.removeItem("movie_watch_history");
+
+    // Reset state về rỗng để giao diện mất sạch lịch sử và yêu thích ngay lập tức
     setCurrentUser(null);
+    setFavorites([]);
+    setWatchHistory([]);
+    setProfileName("");
+    setProfileAvatar("");
+    setHasProfileAvatarError(false);
     setActiveTab("home");
+
     showToast("Đã đăng xuất tài khoản thành công!", "success");
   };
 
-  const handleToggleFavorite = (movie) => {
-    setFavorites((prevFavs) => {
-      const exists = prevFavs.some((item) => item._id === movie._id);
-      if (exists) {
-        showToast("Đã xóa phim khỏi danh sách yêu thích", "error");
-        return prevFavs.filter((item) => item._id !== movie._id);
-      } else {
-        showToast("Đã thêm phim vào danh sách yêu thích ❤️", "success");
-        return [...prevFavs, movie];
-      }
-    });
+  const handleToggleFavorite = async (movie) => {
+    // Nếu chưa đăng nhập, bắt buộc hiện modal đăng nhập
+    if (!currentUser) {
+      setIsAuthOpen(true);
+      showToast("Vui lòng đăng nhập để lưu phim yêu thích!", "error");
+      return;
+    }
+
+    // Cập nhật giao diện trước cho mượt (Optimistic Update)
+    const exists = favorites.some((item) => item._id === movie._id);
+    const updatedFavs = exists
+      ? favorites.filter((item) => item._id !== movie._id)
+      : [...favorites, movie];
+    setFavorites(updatedFavs);
+
+    showToast(
+      exists
+        ? "Đã xóa phim khỏi danh sách yêu thích"
+        : "Đã thêm phim vào danh sách yêu thích ❤️",
+      exists ? "error" : "success",
+    );
+
+    // Gọi API lưu lên MongoDB Cloud
+    try {
+      const token = localStorage.getItem("movie_token");
+      await fetch(`${API_URL}/users/favorites`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ movieId: movie._id }),
+      });
+    } catch (err) {
+      console.error("Lỗi lưu yêu thích lên server:", err);
+    }
   };
 
-  const handleAddToHistory = useCallback((movie) => {
-    setWatchHistory((prevHistory) => {
-      const filtered = prevHistory.filter((item) => item._id !== movie._id);
-      return [movie, ...filtered];
-    });
-  }, []);
+  const handleAddToHistory = useCallback(
+    async (movie) => {
+      if (!currentUser) return; // Nếu chưa đăng nhập thì không cần lưu vào DB account
+
+      setWatchHistory((prevHistory) => {
+        const filtered = prevHistory.filter((item) => item._id !== movie._id);
+        return [movie, ...filtered];
+      });
+
+      try {
+        const token = localStorage.getItem("movie_token");
+        await fetch(`${API_URL}/users/history`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ movieId: movie._id }),
+        });
+      } catch (err) {
+        console.error("Lỗi lưu lịch sử lên server:", err);
+      }
+    },
+    [currentUser],
+  );
 
   // 🌟 Hàm chuyển sang trang xem phim riêng biệt
   const handleOpenWatchPage = (movie) => {
@@ -226,141 +332,366 @@ function App() {
           darkMode={darkMode}
         />
       ) : activeTab === "profile" ? (
-        <div className="max-w-4xl mx-auto px-6 py-12 space-y-8">
+        <div className="max-w-5xl mx-auto px-6 py-10">
           <div
-            className={`${darkMode ? "bg-slate-900 border-slate-800 text-white" : "bg-white border-gray-200 text-slate-900 shadow-xl"} border rounded-2xl p-8 relative overflow-hidden transition-colors`}
+            className={`${darkMode ? "bg-slate-900 border-slate-800 text-white" : "bg-white border-gray-200 text-slate-900 shadow-xl"} border rounded-3xl overflow-hidden transition-colors`}
           >
-            <div className="absolute top-0 right-0 w-64 h-64 bg-red-600/10 rounded-full blur-3xl pointer-events-none"></div>
-
-            <h2 className="text-2xl font-bold mb-6 flex items-center gap-3 text-red-500">
-              <User className="w-7 h-7" /> Hồ Sơ Cá Nhân & Cài Đặt
-            </h2>
-
-            {currentUser ? (
-              <div className="space-y-6">
-                <div
-                  className={`flex items-center gap-4 p-4 rounded-xl border ${darkMode ? "bg-slate-800/50 border-slate-700/50" : "bg-gray-100 border-gray-200"}`}
-                >
-                  <div className="w-16 h-16 rounded-full bg-red-600 flex items-center justify-center text-2xl font-bold text-white shadow-lg">
-                    {currentUser.name
-                      ? currentUser.name.charAt(0).toUpperCase()
-                      : "U"}
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold">{currentUser.name}</h3>
-                    <p
-                      className={`text-xs mt-0.5 flex items-center gap-1.5 ${darkMode ? "text-slate-400" : "text-gray-500"}`}
-                    >
-                      <Mail className="w-3.5 h-3.5" /> {currentUser.email}
-                    </p>
-                  </div>
+            {/* Banner trang trí phía trên */}
+            <div className="h-36 bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 relative overflow-hidden">
+              <div className="absolute inset-0 bg-black/20 backdrop-blur-[2px]"></div>
+              <div className="absolute bottom-4 left-8 flex items-center gap-4">
+                <div className="relative">
+                  {currentUser?.avatar ? (
+                    <img
+                      src={currentUser.avatar}
+                      alt="Avatar"
+                      className="w-20 h-20 rounded-full object-cover border-4 border-slate-900 shadow-2xl"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-slate-900 flex items-center justify-center text-3xl font-bold text-white shadow-2xl border-4 border-slate-800">
+                      {currentUser?.name
+                        ? currentUser.name.charAt(0).toUpperCase()
+                        : "U"}
+                    </div>
+                  )}
+                  <span className="absolute bottom-1 right-1 w-5 h-5 bg-emerald-500 border-4 border-slate-900 rounded-full"></span>
                 </div>
+                <div className="text-white drop-shadow-md">
+                  <h2 className="text-2xl font-extrabold">
+                    {currentUser?.name || "Thành viên"}
+                  </h2>
+                  <p className="text-xs text-white/80">{currentUser?.email}</p>
+                </div>
+              </div>
+            </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div
-                    className={`p-4 rounded-xl border ${darkMode ? "bg-slate-800/30 border-slate-800" : "bg-gray-100 border-gray-200"}`}
-                  >
+            {/* Nội dung chi tiết hồ sơ */}
+            <div className="p-8 space-y-8 mt-4">
+              {/* Thẻ thống kê nhanh */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div
+                  className={`p-5 rounded-2xl border ${darkMode ? "bg-slate-800/40 border-slate-800" : "bg-gray-50 border-gray-200"} flex items-center justify-between`}
+                >
+                  <div>
                     <span
-                      className={`text-xs block mb-1 ${darkMode ? "text-slate-400" : "text-gray-500"}`}
+                      className={`text-xs block font-medium ${darkMode ? "text-slate-400" : "text-gray-500"}`}
                     >
                       Phim yêu thích đã lưu
                     </span>
-                    <span className="text-2xl font-bold text-red-500">
+                    <span className="text-2xl font-bold text-red-500 mt-1 inline-block">
                       {favorites.length} bộ phim
                     </span>
                   </div>
-                  <div
-                    className={`p-4 rounded-xl border ${darkMode ? "bg-slate-800/30 border-slate-800" : "bg-gray-100 border-gray-200"}`}
-                  >
-                    <span
-                      className={`text-xs block mb-1 ${darkMode ? "text-slate-400" : "text-gray-500"}`}
-                    >
-                      Lịch sử xem gần đây
-                    </span>
-                    <span className="text-2xl font-bold text-amber-500">
-                      {watchHistory.length} bộ phim
-                    </span>
+                  <div className="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-500 text-xl font-bold">
+                    ❤️
                   </div>
                 </div>
 
-                {/* Form cập nhật thông tin & Đổi mật khẩu */}
                 <div
-                  className={`p-4 rounded-xl border space-y-4 ${darkMode ? "bg-slate-800/20 border-slate-800" : "bg-gray-50 border-gray-200"}`}
+                  className={`p-5 rounded-2xl border ${darkMode ? "bg-slate-800/40 border-slate-800" : "bg-gray-50 border-gray-200"} flex items-center justify-between`}
                 >
-                  <h4 className="text-sm font-semibold text-red-500">
-                    Chỉnh sửa thông tin cá nhân
-                  </h4>
-
-                  <div className="flex gap-3">
-                    <input
-                      type="text"
-                      placeholder="Nhập tên mới..."
-                      defaultValue={currentUser.name}
-                      id="updateNameInput"
-                      className={`flex-1 px-3 py-2 rounded-xl text-xs border focus:outline-none focus:border-red-500 ${
-                        darkMode
-                          ? "bg-slate-900 border-slate-700 text-white"
-                          : "bg-white border-gray-300 text-slate-900"
-                      }`}
-                    />
-                    <button
-                      onClick={() => {
-                        const inputEl =
-                          document.getElementById("updateNameInput");
-                        if (!inputEl || !inputEl.value.trim()) return;
-                        const updated = {
-                          ...currentUser,
-                          name: inputEl.value.trim(),
-                        };
-                        setCurrentUser(updated);
-                        localStorage.setItem(
-                          "movie_user",
-                          JSON.stringify(updated),
-                        );
-                        showToast("Cập nhật tên thành công!", "success");
-                      }}
-                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold transition cursor-pointer"
+                  <div>
+                    <span
+                      className={`text-xs block font-medium ${darkMode ? "text-slate-400" : "text-gray-500"}`}
                     >
-                      Lưu tên
-                    </button>
+                      Lịch sử xem gần đây
+                    </span>
+                    <span className="text-2xl font-bold text-amber-500 mt-1 inline-block">
+                      {watchHistory.length} bộ phim
+                    </span>
+                  </div>
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500 text-xl font-bold">
+                    🕒
+                  </div>
+                </div>
+              </div>
+
+              {currentUser ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* Cột 1: Chỉnh sửa thông tin & Bấm đổi Avatar */}
+                  <div
+                    className={`p-6 rounded-2xl border space-y-4 ${darkMode ? "bg-slate-800/20 border-slate-800" : "bg-gray-50 border-gray-200"}`}
+                  >
+                    <h4 className="text-sm font-bold text-red-500 flex items-center gap-2">
+                      <User className="w-4 h-4" /> Chỉnh Sửa Thông Tin Cá Nhân
+                    </h4>
+
+                    <div className="space-y-4">
+                      {/* 🌟 Vùng bấm trực tiếp vào Avatar để chọn ảnh từ tệp */}
+                      <div className="flex items-center gap-4">
+                        <div
+                          className="relative group cursor-pointer"
+                          onClick={() => avatarFileInputRef.current?.click()}
+                        >
+                          {profileAvatar && !hasProfileAvatarError ? (
+                            <img
+                              src={profileAvatar}
+                              alt="Avatar"
+                              onError={() => setHasProfileAvatarError(true)}
+                              className="w-20 h-20 rounded-full object-cover border-2 border-red-500 shadow-md group-hover:opacity-80 transition"
+                            />
+                          ) : (
+                            <div className="w-20 h-20 rounded-full bg-red-600 flex items-center justify-center text-2xl font-bold text-white shadow-lg group-hover:opacity-80 transition">
+                              {currentUser?.name
+                                ? currentUser.name.charAt(0).toUpperCase()
+                                : "U"}
+                            </div>
+                          )}
+                          <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-white text-[10px] font-semibold text-center p-1">
+                            📷 Đổi ảnh
+                          </div>
+                        </div>
+
+                        <div>
+                          <p
+                            className={`text-xs font-medium ${darkMode ? "text-slate-300" : "text-gray-700"}`}
+                          >
+                            Ảnh đại diện của bạn
+                          </p>
+                          <p
+                            className={`text-[11px] mt-0.5 ${darkMode ? "text-slate-400" : "text-gray-500"}`}
+                          >
+                            Bấm vào ảnh để chọn từ máy tính hoặc bấm mẫu có sẵn.
+                          </p>
+                        </div>
+
+                        {/* Input chọn file ẩn */}
+                        <input
+                          type="file"
+                          ref={avatarFileInputRef}
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = "";
+                            if (!file) return;
+
+                            if (!file.type.startsWith("image/")) {
+                              showToast(
+                                "Vui lòng chọn một tệp hình ảnh.",
+                                "error",
+                              );
+                              return;
+                            }
+
+                            if (file.size > 700 * 1024) {
+                              showToast(
+                                "Ảnh quá lớn. Vui lòng chọn ảnh nhỏ hơn 700 KB.",
+                                "error",
+                              );
+                              return;
+                            }
+
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              if (typeof reader.result !== "string") {
+                                showToast(
+                                  "Không thể đọc tệp ảnh đã chọn.",
+                                  "error",
+                                );
+                                return;
+                              }
+                              setHasProfileAvatarError(false);
+                              setProfileAvatar(reader.result);
+                              showToast(
+                                "Đã chọn ảnh mới. Nhấn 'Lưu Thay Đổi' để hoàn tất.",
+                                "success",
+                              );
+                            };
+                            reader.onerror = () => {
+                              showToast(
+                                "Không thể đọc tệp ảnh đã chọn.",
+                                "error",
+                              );
+                            };
+                            reader.readAsDataURL(file);
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label
+                          className={`block text-xs mb-1 font-medium ${darkMode ? "text-slate-400" : "text-gray-600"}`}
+                        >
+                          Họ và tên hiển thị
+                        </label>
+                        <input
+                          type="text"
+                          value={profileName}
+                          onChange={(e) => setProfileName(e.target.value)}
+                          className={`w-full px-3.5 py-2.5 rounded-xl text-xs border focus:outline-none focus:border-red-500 ${darkMode ? "bg-slate-900 border-slate-700 text-white" : "bg-white border-gray-300 text-slate-900"}`}
+                        />
+                      </div>
+
+                      {/* Chọn nhanh Avatar mẫu */}
+                      <div>
+                        <span
+                          className={`block text-[11px] mb-1.5 ${darkMode ? "text-slate-400" : "text-gray-500"}`}
+                        >
+                          Hoặc chọn nhanh avatar mẫu có sẵn:
+                        </span>
+                        <div className="flex gap-2.5">
+                          {[
+                            "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
+                            "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150",
+                            "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150",
+                            "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150",
+                            "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=150",
+                          ].map((sampleUrl, idx) => (
+                            <img
+                              key={idx}
+                              src={sampleUrl}
+                              alt="Sample"
+                              onClick={() => {
+                                setHasProfileAvatarError(false);
+                                setProfileAvatar(sampleUrl);
+                                showToast(
+                                  "Đã chọn avatar mẫu! Nhấn 'Lưu Thay Đổi' để áp dụng.",
+                                  "success",
+                                );
+                              }}
+                              className="w-10 h-10 rounded-full object-cover border-2 border-slate-700 hover:border-red-500 cursor-pointer transition transform hover:scale-110 shadow-sm"
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      <button
+                        disabled={isSavingProfile}
+                        onClick={async () => {
+                          const newName = profileName.trim();
+                          if (!newName) {
+                            showToast("Vui lòng không để trống tên!", "error");
+                            return;
+                          }
+
+                          setIsSavingProfile(true);
+                          try {
+                            const token = localStorage.getItem("movie_token");
+                            if (!token) {
+                              showToast(
+                                "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
+                                "error",
+                              );
+                              return;
+                            }
+
+                            const res = await fetch(
+                              `${API_URL}/users/update-profile`,
+                              {
+                                method: "PUT",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                  Authorization: `Bearer ${token}`,
+                                },
+                                body: JSON.stringify({
+                                  name: newName,
+                                  avatar: profileAvatar,
+                                }),
+                              },
+                            );
+
+                            const responseText = await res.text();
+                            let data;
+                            try {
+                              data = responseText
+                                ? JSON.parse(responseText)
+                                : {};
+                            } catch {
+                              throw new Error(
+                                `Máy chủ trả về phản hồi không hợp lệ (${res.status}).`,
+                              );
+                            }
+
+                            if (!res.ok) {
+                              throw new Error(
+                                data.message ||
+                                  `Không thể cập nhật hồ sơ (${res.status}).`,
+                              );
+                            }
+
+                            if (!data.user) {
+                              throw new Error(
+                                "Máy chủ không trả về thông tin hồ sơ đã cập nhật.",
+                              );
+                            }
+
+                            setCurrentUser(data.user);
+                            localStorage.setItem(
+                              "movie_user",
+                              JSON.stringify(data.user),
+                            );
+                            showToast(
+                              "🎉 Cập nhật hồ sơ và ảnh đại diện thành công!",
+                              "success",
+                            );
+                          } catch (err) {
+                            console.error("Lỗi cập nhật hồ sơ:", err);
+                            showToast(
+                              err instanceof Error
+                                ? err.message
+                                : "Lỗi kết nối đến máy chủ!",
+                              "error",
+                            );
+                          } finally {
+                            setIsSavingProfile(false);
+                          }
+                        }}
+                        className="w-full mt-2 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold transition cursor-pointer shadow-lg shadow-red-600/25 disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {isSavingProfile ? "Đang lưu..." : "Lưu Thay Đổi Hồ Sơ"}
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="space-y-3 pt-3 border-t border-slate-700/50">
-                    <h5 className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                      🔒 Bảo mật & Đổi mật khẩu
-                    </h5>
+                  {/* Cột 2: Bảo mật & Đổi mật khẩu */}
+                  <div
+                    className={`p-6 rounded-2xl border space-y-4 ${darkMode ? "bg-slate-800/20 border-slate-800" : "bg-gray-50 border-gray-200"}`}
+                  >
+                    <h4 className="text-sm font-bold text-amber-500 flex items-center gap-2">
+                      🔒 Bảo Mật & Đổi Mật Khẩu
+                    </h4>
 
-                    <div className="space-y-2">
-                      <input
-                        type="password"
-                        placeholder="Mật khẩu hiện tại..."
-                        id="oldPasswordInput"
-                        className={`w-full px-3 py-2 rounded-xl text-xs border focus:outline-none focus:border-red-500 ${
-                          darkMode
-                            ? "bg-slate-900 border-slate-700 text-white"
-                            : "bg-white border-gray-300 text-slate-900"
-                        }`}
-                      />
-                      <input
-                        type="password"
-                        placeholder="Mật khẩu mới (tối thiểu 6 ký tự)..."
-                        id="newPasswordInput"
-                        className={`w-full px-3 py-2 rounded-xl text-xs border focus:outline-none focus:border-red-500 ${
-                          darkMode
-                            ? "bg-slate-900 border-slate-700 text-white"
-                            : "bg-white border-gray-300 text-slate-900"
-                        }`}
-                      />
-                      <input
-                        type="password"
-                        placeholder="Xác nhận lại mật khẩu mới..."
-                        id="confirmPasswordInput"
-                        className={`w-full px-3 py-2 rounded-xl text-xs border focus:outline-none focus:border-red-500 ${
-                          darkMode
-                            ? "bg-slate-900 border-slate-700 text-white"
-                            : "bg-white border-gray-300 text-slate-900"
-                        }`}
-                      />
+                    <div className="space-y-3">
+                      <div>
+                        <label
+                          className={`block text-xs mb-1 font-medium ${darkMode ? "text-slate-400" : "text-gray-600"}`}
+                        >
+                          Mật khẩu hiện tại
+                        </label>
+                        <input
+                          type="password"
+                          placeholder="••••••••"
+                          id="oldPasswordInput"
+                          className={`w-full px-3.5 py-2.5 rounded-xl text-xs border focus:outline-none focus:border-red-500 ${darkMode ? "bg-slate-900 border-slate-700 text-white" : "bg-white border-gray-300 text-slate-900"}`}
+                        />
+                      </div>
+                      <div>
+                        <label
+                          className={`block text-xs mb-1 font-medium ${darkMode ? "text-slate-400" : "text-gray-600"}`}
+                        >
+                          Mật khẩu mới (tối thiểu 6 ký tự)
+                        </label>
+                        <input
+                          type="password"
+                          placeholder="••••••••"
+                          id="newPasswordInput"
+                          className={`w-full px-3.5 py-2.5 rounded-xl text-xs border focus:outline-none focus:border-red-500 ${darkMode ? "bg-slate-900 border-slate-700 text-white" : "bg-white border-gray-300 text-slate-900"}`}
+                        />
+                      </div>
+                      <div>
+                        <label
+                          className={`block text-xs mb-1 font-medium ${darkMode ? "text-slate-400" : "text-gray-600"}`}
+                        >
+                          Xác nhận mật khẩu mới
+                        </label>
+                        <input
+                          type="password"
+                          placeholder="••••••••"
+                          id="confirmPasswordInput"
+                          className={`w-full px-3.5 py-2.5 rounded-xl text-xs border focus:outline-none focus:border-red-500 ${darkMode ? "bg-slate-900 border-slate-700 text-white" : "bg-white border-gray-300 text-slate-900"}`}
+                        />
+                      </div>
 
                       <button
                         onClick={() => {
@@ -374,7 +705,7 @@ function App() {
 
                           if (!oldPass || !newPass || !confirmPass) {
                             showToast(
-                              "Vui lòng điền đầy đủ thông tin mật khẩu!",
+                              "Vui lòng điền đầy đủ các trường mật khẩu!",
                               "error",
                             );
                             return;
@@ -390,54 +721,52 @@ function App() {
                             showToast("Mật khẩu xác nhận không khớp!", "error");
                             return;
                           }
-
-                          showToast("Đổi mật khẩu thành công!", "success");
-                          document.getElementById("oldPasswordInput").value =
-                            "";
-                          document.getElementById("newPasswordInput").value =
-                            "";
-                          document.getElementById(
-                            "confirmPasswordInput",
-                          ).value = "";
+                          showToast(
+                            "Chức năng đổi mật khẩu đang được phát triển.",
+                            "error",
+                          );
                         }}
-                        className="w-full px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold transition cursor-pointer"
+                        className="w-full mt-2 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold transition cursor-pointer"
                       >
-                        Cập nhật mật khẩu mới
+                        Cập Nhật Mật Khẩu
                       </button>
                     </div>
                   </div>
                 </div>
-
-                <div className="pt-2 flex gap-4">
-                  <button
-                    onClick={() => setActiveTab("home")}
-                    className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-semibold transition cursor-pointer shadow-lg shadow-red-600/30"
+              ) : (
+                <div className="text-center py-10 space-y-4">
+                  <p
+                    className={`text-sm ${darkMode ? "text-slate-400" : "text-gray-500"}`}
                   >
-                    Khám phá phim ngay
+                    Bạn chưa đăng nhập vào tài khoản.
+                  </p>
+                  <button
+                    onClick={() => setIsAuthOpen(true)}
+                    className="px-6 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition cursor-pointer"
+                  >
+                    Đăng nhập ngay
                   </button>
+                </div>
+              )}
+
+              {/* Nút hành động cuối trang */}
+              <div className="pt-4 border-t border-slate-800/80 flex items-center justify-between">
+                <button
+                  onClick={() => setActiveTab("home")}
+                  className="px-6 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition cursor-pointer"
+                >
+                  ← Quay lại trang chủ
+                </button>
+                {currentUser && (
                   <button
                     onClick={handleLogout}
-                    className={`px-6 py-2.5 rounded-xl text-sm font-semibold transition cursor-pointer ${darkMode ? "bg-slate-800 hover:bg-slate-700 text-slate-300" : "bg-gray-200 hover:bg-gray-300 text-slate-700"}`}
+                    className="px-6 py-2.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 rounded-xl text-xs font-semibold transition cursor-pointer"
                   >
                     Đăng xuất tài khoản
                   </button>
-                </div>
+                )}
               </div>
-            ) : (
-              <div className="text-center py-10 space-y-4">
-                <p
-                  className={`text-sm ${darkMode ? "text-slate-400" : "text-gray-500"}`}
-                >
-                  Bạn chưa đăng nhập vào tài khoản.
-                </p>
-                <button
-                  onClick={() => setIsAuthOpen(true)}
-                  className="px-6 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition cursor-pointer"
-                >
-                  Đăng nhập ngay
-                </button>
-              </div>
-            )}
+            </div>
           </div>
         </div>
       ) : activeTab === "history" ? (
@@ -517,9 +846,7 @@ function App() {
                   for (let i = 0; i < localStorage.length; i++) {
                     const key = localStorage.key(i);
                     if (key && key.startsWith("movie_comments_")) {
-                      const comments = JSON.parse(
-                        localStorage.getItem(key) || "[]",
-                      );
+                      const comments = readJsonStorage(key, [], Array.isArray);
                       comments.forEach((c) => {
                         if (
                           c.userName === currentUser.name ||
@@ -709,7 +1036,7 @@ function App() {
             </div>
           )}
 
-          <main className="max-w-7xl mx-auto px-6 py-6">
+          <main className="max-w-7xl mx-auto px-6 py-6 animate-fadeIn">
             <div className="flex items-center justify-between mb-6">
               <h2
                 className={`text-xl font-bold flex items-center gap-2 ${darkMode ? "text-slate-100" : "text-slate-800"}`}
@@ -735,6 +1062,13 @@ function App() {
                 {[...Array(10)].map((_, i) => (
                   <SkeletonCard key={i} darkMode={darkMode} />
                 ))}
+              </div>
+            ) : activeTab === "home" && moviesError ? (
+              <div
+                role="alert"
+                className={`text-center py-20 space-y-3 ${darkMode ? "text-slate-400" : "text-gray-500"}`}
+              >
+                <p>{moviesError}</p>
               </div>
             ) : currentMovies.length === 0 ? (
               <div
@@ -792,7 +1126,10 @@ function App() {
         onClose={() => setIsAuthOpen(false)}
         onLoginSuccess={(user) => {
           setCurrentUser(user);
-          showToast(`Chào mừng trở lại, ${user.name || "Bạn"}!`, "success");
+          setProfileName(user.name || "");
+          setProfileAvatar(user.avatar || "");
+          setHasProfileAvatarError(false);
+          showToast(`Chào mừng trở lại, ${user.name || "User"}!`, "success");
         }}
       />
 

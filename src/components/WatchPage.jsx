@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { ArrowLeft, Star, Send, MessageSquare, Share2 } from "lucide-react";
+import { readJsonStorage } from "../utils/storage";
 
 export default function WatchPage({
   movie,
@@ -11,12 +12,10 @@ export default function WatchPage({
   darkMode,
 }) {
   const [reviews, setReviews] = useState(() => {
-    const savedReviews = movie
-      ? localStorage.getItem(`movie_comments_${movie._id}`)
-      : null;
-    return savedReviews
-      ? JSON.parse(savedReviews)
-      : [
+    return movie
+      ? readJsonStorage(
+          `movie_comments_${movie._id}`,
+          [
           {
             id: 1,
             userName: "Nguyễn Văn A",
@@ -24,7 +23,10 @@ export default function WatchPage({
             text: "Phim xem cực kỳ cuốn và cảm xúc!",
             date: "19/10/2026",
           },
-        ];
+          ],
+          Array.isArray,
+        )
+      : [];
   });
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");

@@ -1,32 +1,32 @@
 import { useState, useEffect } from "react";
 import { X, Star, Send, MessageSquare } from "lucide-react";
+import { readJsonStorage } from "../utils/storage";
 
 function MovieDetailModal({ movie, onClose, onAddToHistory, currentUser }) {
   const loadReviews = (targetMovie) => {
     if (!targetMovie) return [];
-    const savedReviews = localStorage.getItem(
+    return readJsonStorage(
       `movie_comments_${targetMovie._id}`,
+      [
+        {
+          id: 1,
+          userName: "Nguyễn Văn A",
+          userEmail: "nguyenvana@gmail.com",
+          rating: 5,
+          text: "Phim xem cực kỳ cuốn và cảm xúc!",
+          date: "12/05/2026",
+        },
+        {
+          id: 2,
+          userName: "Trần Thị B",
+          userEmail: "tranthib@gmail.com",
+          rating: 4,
+          text: "Kỹ xảo đẹp, âm thanh sống động.",
+          date: "14/05/2026",
+        },
+      ],
+      Array.isArray,
     );
-    return savedReviews
-      ? JSON.parse(savedReviews)
-      : [
-          {
-            id: 1,
-            userName: "Nguyễn Văn A",
-            userEmail: "nguyenvana@gmail.com",
-            rating: 5,
-            text: "Phim xem cực kỳ cuốn và cảm xúc!",
-            date: "12/05/2026",
-          },
-          {
-            id: 2,
-            userName: "Trần Thị B",
-            userEmail: "tranthib@gmail.com",
-            rating: 4,
-            text: "Kỹ xảo đẹp, âm thanh sống động.",
-            date: "14/05/2026",
-          },
-        ];
   };
   const [reviewState, setReviewState] = useState(() => ({
     movieId: movie?._id,
