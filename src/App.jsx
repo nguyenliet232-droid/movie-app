@@ -13,6 +13,7 @@ function App() {
   const [movies, setMovies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [moviesError, setMoviesError] = useState("");
+
   const [currentUser, setCurrentUser] = useState(() =>
     readJsonStorage(
       "movie_user",
@@ -21,12 +22,12 @@ function App() {
         value === null || (typeof value === "object" && !Array.isArray(value)),
     ),
   );
+
   const [profileName, setProfileName] = useState(() => currentUser?.name || "");
   const [profileAvatar, setProfileAvatar] = useState(
     () => currentUser?.avatar || "",
   );
   const [hasProfileAvatarError, setHasProfileAvatarError] = useState(false);
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [selectedMovie, setSelectedMovie] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAuthOpen, setIsAuthOpen] = useState(false);
@@ -59,15 +60,9 @@ function App() {
     }, 3000);
   };
 
-  // 🌟 Quản lý danh sách Yêu thích
-  const [favorites, setFavorites] = useState(() =>
-    readJsonStorage("movie_favorites", [], Array.isArray),
-  );
-
-  // 🌟 Quản lý Lịch sử xem (Continue Watching)
-  const [watchHistory, setWatchHistory] = useState(() =>
-    readJsonStorage("movie_watch_history", [], Array.isArray),
-  );
+  // 🌟 Quản lý danh sách Yêu thích & Lịch sử
+  const [favorites, setFavorites] = useState([]);
+  const [watchHistory, setWatchHistory] = useState([]);
 
   // 🌟 Quản lý thể loại đang chọn
   const [selectedCategory, setSelectedCategory] = useState("Tất cả");
@@ -80,10 +75,24 @@ function App() {
     "Khoa học viễn tưởng",
   ];
 
+  // 🌟 BƯỚC 1: State mở rộng Lọc theo Quốc gia và Năm phát hành
+  const [selectedCountry, setSelectedCountry] = useState("Tất cả");
+  const [selectedYear, setSelectedYear] = useState("Tất cả");
+
+  const countries = [
+    "Tất cả",
+    "Hàn Quốc",
+    "Mỹ",
+    "Trung Quốc",
+    "Nhật Bản",
+    "Việt Nam",
+  ];
+  const years = ["Tất cả", "2026", "2025", "2024", "2023"];
+
   // 🌟 State Quản lý Sắp xếp nâng cao ("latest" | "az" | "rating")
   const [sortBy, setSortBy] = useState("latest");
 
-  // 🌟 State Quản lý số lượng hiển thị (Load More thay cho phân trang số)
+  // 🌟 State Quản lý số lượng hiển thị (Load More)
   const [visibleCountState, setVisibleCountState] = useState({
     key: "",
     count: 10,
@@ -92,12 +101,14 @@ function App() {
     activeTab,
     searchTerm,
     selectedCategory,
+    selectedCountry,
+    selectedYear,
     sortBy,
   ]);
   const visibleCount =
     visibleCountState.key === visibilityKey ? visibleCountState.count : 10;
 
-  // 🌟 State quản lý vị trí Banner tự động chạy xoay vòng (cứ 6 giây đổi phim)
+  // 🌟 State quản lý vị trí Banner tự động chạy xoay vòng
   const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
 
   useEffect(() => {
@@ -106,7 +117,7 @@ function App() {
       setCurrentBannerIndex(
         (prevIndex) => (prevIndex + 1) % Math.min(movies.length, 5),
       );
-    }, 6000); // 6 giây
+    }, 6000);
 
     return () => clearInterval(interval);
   }, [movies]);
@@ -138,12 +149,11 @@ function App() {
     fetchMovies();
   }, []);
 
-  // 🌟 Đồng bộ dữ liệu Yêu thích và Lịch sử từ MongoDB khi có user đăng nhập
+  // 🌟 Đồng bộ dữ liệu Yêu thích và Lịch sử trực tiếp từ MongoDB khi có user đăng nhập
   useEffect(() => {
     const fetchUserDataFromDB = async () => {
       const token = localStorage.getItem("movie_token");
       if (!token || !currentUser) {
-        // Nếu đăng xuất, xóa sạch state
         setFavorites([]);
         setWatchHistory([]);
         return;
@@ -166,21 +176,12 @@ function App() {
     fetchUserDataFromDB();
   }, [currentUser]);
 
-  useEffect(() => {
-    localStorage.setItem("movie_favorites", JSON.stringify(favorites));
-  }, [favorites]);
-
-  useEffect(() => {
-    localStorage.setItem("movie_watch_history", JSON.stringify(watchHistory));
-  }, [watchHistory]);
-
   const handleLogout = () => {
     localStorage.removeItem("movie_user");
     localStorage.removeItem("movie_token");
     localStorage.removeItem("movie_favorites");
     localStorage.removeItem("movie_watch_history");
 
-    // Reset state về rỗng để giao diện mất sạch lịch sử và yêu thích ngay lập tức
     setCurrentUser(null);
     setFavorites([]);
     setWatchHistory([]);
@@ -193,14 +194,12 @@ function App() {
   };
 
   const handleToggleFavorite = async (movie) => {
-    // Nếu chưa đăng nhập, bắt buộc hiện modal đăng nhập
     if (!currentUser) {
       setIsAuthOpen(true);
       showToast("Vui lòng đăng nhập để lưu phim yêu thích!", "error");
       return;
     }
 
-    // Cập nhật giao diện trước cho mượt (Optimistic Update)
     const exists = favorites.some((item) => item._id === movie._id);
     const updatedFavs = exists
       ? favorites.filter((item) => item._id !== movie._id)
@@ -214,7 +213,6 @@ function App() {
       exists ? "error" : "success",
     );
 
-    // Gọi API lưu lên MongoDB Cloud
     try {
       const token = localStorage.getItem("movie_token");
       await fetch(`${API_URL}/users/favorites`, {
@@ -232,7 +230,7 @@ function App() {
 
   const handleAddToHistory = useCallback(
     async (movie) => {
-      if (!currentUser) return; // Nếu chưa đăng nhập thì không cần lưu vào DB account
+      if (!currentUser) return;
 
       setWatchHistory((prevHistory) => {
         const filtered = prevHistory.filter((item) => item._id !== movie._id);
@@ -256,7 +254,36 @@ function App() {
     [currentUser],
   );
 
-  // 🌟 Hàm chuyển sang trang xem phim riêng biệt
+  // 🌟 Hàm hỗ trợ cập nhật trực tiếp tên hoặc ảnh đại diện lên MongoDB
+  const handleUpdateProfileDirectly = async (newName, newAvatar) => {
+    try {
+      const token = localStorage.getItem("movie_token");
+      const res = await fetch(`${API_URL}/users/update-profile`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: newName,
+          avatar: newAvatar,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setCurrentUser(data.user);
+        localStorage.setItem("movie_user", JSON.stringify(data.user));
+        showToast("✨ Cập nhật hồ sơ thành công!", "success");
+      } else {
+        showToast(data.message || "Cập nhật thất bại!", "error");
+      }
+    } catch (err) {
+      console.error("Lỗi kết nối:", err);
+      showToast("Lỗi kết nối đến máy chủ!", "error");
+    }
+  };
+
   const handleOpenWatchPage = (movie) => {
     setSelectedMovie(movie);
     handleAddToHistory(movie);
@@ -270,7 +297,7 @@ function App() {
     return movies;
   };
 
-  // 1. Lọc theo từ khóa tìm kiếm và thể loại
+  // 🌟 Lọc phim nâng cao theo Từ khóa, Thể loại, Quốc gia và Năm
   const filteredMovies = getDisplayMovies().filter((movie) => {
     const title = movie.title || movie.name || "";
     const matchesSearch = title
@@ -278,10 +305,14 @@ function App() {
       .includes(searchTerm.toLowerCase());
     const matchesCategory =
       selectedCategory === "Tất cả" || movie.category === selectedCategory;
-    return matchesSearch && matchesCategory;
+    const matchesCountry =
+      selectedCountry === "Tất cả" || movie.country === selectedCountry;
+    const matchesYear =
+      selectedYear === "Tất cả" || String(movie.releaseYear) === selectedYear;
+
+    return matchesSearch && matchesCategory && matchesCountry && matchesYear;
   });
 
-  // 2. Sắp xếp nâng cao
   const sortedMovies = [...filteredMovies].sort((a, b) => {
     const titleA = a.title || a.name || "";
     const titleB = b.title || b.name || "";
@@ -294,7 +325,6 @@ function App() {
     }
   });
 
-  // 3. Cắt danh sách theo Load More
   const currentMovies = sortedMovies.slice(0, visibleCount);
   const hasMore = visibleCount < sortedMovies.length;
 
@@ -336,37 +366,127 @@ function App() {
           <div
             className={`${darkMode ? "bg-slate-900 border-slate-800 text-white" : "bg-white border-gray-200 text-slate-900 shadow-xl"} border rounded-3xl overflow-hidden transition-colors`}
           >
-            {/* Banner trang trí phía trên */}
-            <div className="h-36 bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 relative overflow-hidden">
+            {/* 🌟 BANNER TÍCH HỢP CHỈNH SỬA TRỰC TIẾP */}
+            <div className="h-44 bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 relative overflow-hidden">
               <div className="absolute inset-0 bg-black/20 backdrop-blur-[2px]"></div>
-              <div className="absolute bottom-4 left-8 flex items-center gap-4">
-                <div className="relative">
+
+              <div className="absolute bottom-4 left-8 flex flex-col sm:flex-row items-start sm:items-center gap-5 w-full pr-10">
+                {/* 1. Click vào ảnh đại diện để đổi ảnh từ máy */}
+                <div
+                  className="relative group cursor-pointer"
+                  onClick={() =>
+                    document.getElementById("bannerFileAvatarInput").click()
+                  }
+                  title="Bấm để đổi ảnh đại diện"
+                >
                   {currentUser?.avatar ? (
                     <img
                       src={currentUser.avatar}
                       alt="Avatar"
-                      className="w-20 h-20 rounded-full object-cover border-4 border-slate-900 shadow-2xl"
+                      className="w-24 h-24 rounded-full object-cover border-4 border-slate-900 shadow-2xl group-hover:opacity-80 transition"
                     />
                   ) : (
-                    <div className="w-20 h-20 rounded-full bg-slate-900 flex items-center justify-center text-3xl font-bold text-white shadow-2xl border-4 border-slate-800">
+                    <div className="w-24 h-24 rounded-full bg-slate-900 flex items-center justify-center text-4xl font-bold text-white shadow-2xl border-4 border-slate-800 group-hover:opacity-80 transition">
                       {currentUser?.name
                         ? currentUser.name.charAt(0).toUpperCase()
                         : "U"}
                     </div>
                   )}
+                  <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-white text-[11px] font-semibold text-center p-1">
+                    📷 Đổi ảnh
+                  </div>
                   <span className="absolute bottom-1 right-1 w-5 h-5 bg-emerald-500 border-4 border-slate-900 rounded-full"></span>
                 </div>
-                <div className="text-white drop-shadow-md">
-                  <h2 className="text-2xl font-extrabold">
-                    {currentUser?.name || "Thành viên"}
-                  </h2>
-                  <p className="text-xs text-white/80">{currentUser?.email}</p>
+
+                {/* Input chọn file ẩn cho Banner */}
+                <input
+                  type="file"
+                  id="bannerFileAvatarInput"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onloadend = async () => {
+                        const base64String = reader.result;
+                        await handleUpdateProfileDirectly(
+                          currentUser?.name,
+                          base64String,
+                        );
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                />
+
+                {/* 2. Click vào tên để sửa tên trực tiếp */}
+                <div className="text-white drop-shadow-md space-y-1 flex-1">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      defaultValue={currentUser?.name || ""}
+                      id="bannerNameInput"
+                      onBlur={async (e) => {
+                        const newName = e.target.value.trim();
+                        if (newName && newName !== currentUser?.name) {
+                          await handleUpdateProfileDirectly(
+                            newName,
+                            currentUser?.avatar,
+                          );
+                        }
+                      }}
+                      className="bg-transparent hover:bg-white/10 focus:bg-slate-900/80 px-2.5 py-1 rounded-xl text-2xl font-extrabold focus:outline-none focus:ring-2 focus:ring-red-500 transition w-full sm:w-auto max-w-xs"
+                      placeholder="Nhập tên của bạn..."
+                      title="Bấm vào tên để sửa, bấm ra ngoài để lưu"
+                    />
+                    <span className="text-xs bg-black/30 px-2 py-0.5 rounded-md text-slate-300 hidden sm:inline-block">
+                      ✏️ Bấm vào tên để sửa
+                    </span>
+                  </div>
+                  <p className="text-xs text-white/80 px-2.5">
+                    {currentUser?.email}
+                  </p>
                 </div>
               </div>
             </div>
 
-            {/* Nội dung chi tiết hồ sơ */}
-            <div className="p-8 space-y-8 mt-4">
+            {/* Nội dung chi tiết hồ sơ bên dưới */}
+            <div className="p-8 space-y-8 mt-2">
+              {/* Chọn nhanh Avatar mẫu */}
+              <div
+                className={`p-4 rounded-2xl border ${darkMode ? "bg-slate-800/30 border-slate-800" : "bg-gray-50 border-gray-200"} flex flex-col sm:flex-row items-center justify-between gap-4`}
+              >
+                <span
+                  className={`text-xs font-medium ${darkMode ? "text-slate-300" : "text-gray-700"}`}
+                >
+                  🌟 Hoặc chọn nhanh avatar mẫu có sẵn:
+                </span>
+                <div className="flex items-center gap-3">
+                  {[
+                    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
+                    "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150",
+                    "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150",
+                    "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150",
+                    "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=150",
+                  ].map((sampleUrl, idx) => (
+                    <img
+                      key={idx}
+                      src={sampleUrl}
+                      alt="Sample"
+                      onClick={async () => {
+                        await handleUpdateProfileDirectly(
+                          currentUser?.name,
+                          sampleUrl,
+                        );
+                      }}
+                      className="w-10 h-10 rounded-full object-cover border-2 border-slate-700 hover:border-red-500 cursor-pointer transition transform hover:scale-110 shadow-md"
+                      title="Bấm để đổi sang ảnh này"
+                    />
+                  ))}
+                </div>
+              </div>
+
               {/* Thẻ thống kê nhanh */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div
@@ -406,250 +526,14 @@ function App() {
                 </div>
               </div>
 
-              {currentUser ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {/* Cột 1: Chỉnh sửa thông tin & Bấm đổi Avatar */}
-                  <div
-                    className={`p-6 rounded-2xl border space-y-4 ${darkMode ? "bg-slate-800/20 border-slate-800" : "bg-gray-50 border-gray-200"}`}
-                  >
-                    <h4 className="text-sm font-bold text-red-500 flex items-center gap-2">
-                      <User className="w-4 h-4" /> Chỉnh Sửa Thông Tin Cá Nhân
-                    </h4>
-
-                    <div className="space-y-4">
-                      {/* 🌟 Vùng bấm trực tiếp vào Avatar để chọn ảnh từ tệp */}
-                      <div className="flex items-center gap-4">
-                        <div
-                          className="relative group cursor-pointer"
-                          onClick={() => avatarFileInputRef.current?.click()}
-                        >
-                          {profileAvatar && !hasProfileAvatarError ? (
-                            <img
-                              src={profileAvatar}
-                              alt="Avatar"
-                              onError={() => setHasProfileAvatarError(true)}
-                              className="w-20 h-20 rounded-full object-cover border-2 border-red-500 shadow-md group-hover:opacity-80 transition"
-                            />
-                          ) : (
-                            <div className="w-20 h-20 rounded-full bg-red-600 flex items-center justify-center text-2xl font-bold text-white shadow-lg group-hover:opacity-80 transition">
-                              {currentUser?.name
-                                ? currentUser.name.charAt(0).toUpperCase()
-                                : "U"}
-                            </div>
-                          )}
-                          <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-white text-[10px] font-semibold text-center p-1">
-                            📷 Đổi ảnh
-                          </div>
-                        </div>
-
-                        <div>
-                          <p
-                            className={`text-xs font-medium ${darkMode ? "text-slate-300" : "text-gray-700"}`}
-                          >
-                            Ảnh đại diện của bạn
-                          </p>
-                          <p
-                            className={`text-[11px] mt-0.5 ${darkMode ? "text-slate-400" : "text-gray-500"}`}
-                          >
-                            Bấm vào ảnh để chọn từ máy tính hoặc bấm mẫu có sẵn.
-                          </p>
-                        </div>
-
-                        {/* Input chọn file ẩn */}
-                        <input
-                          type="file"
-                          ref={avatarFileInputRef}
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            e.target.value = "";
-                            if (!file) return;
-
-                            if (!file.type.startsWith("image/")) {
-                              showToast(
-                                "Vui lòng chọn một tệp hình ảnh.",
-                                "error",
-                              );
-                              return;
-                            }
-
-                            if (file.size > 700 * 1024) {
-                              showToast(
-                                "Ảnh quá lớn. Vui lòng chọn ảnh nhỏ hơn 700 KB.",
-                                "error",
-                              );
-                              return;
-                            }
-
-                            const reader = new FileReader();
-                            reader.onload = () => {
-                              if (typeof reader.result !== "string") {
-                                showToast(
-                                  "Không thể đọc tệp ảnh đã chọn.",
-                                  "error",
-                                );
-                                return;
-                              }
-                              setHasProfileAvatarError(false);
-                              setProfileAvatar(reader.result);
-                              showToast(
-                                "Đã chọn ảnh mới. Nhấn 'Lưu Thay Đổi' để hoàn tất.",
-                                "success",
-                              );
-                            };
-                            reader.onerror = () => {
-                              showToast(
-                                "Không thể đọc tệp ảnh đã chọn.",
-                                "error",
-                              );
-                            };
-                            reader.readAsDataURL(file);
-                          }}
-                        />
-                      </div>
-
-                      <div>
-                        <label
-                          className={`block text-xs mb-1 font-medium ${darkMode ? "text-slate-400" : "text-gray-600"}`}
-                        >
-                          Họ và tên hiển thị
-                        </label>
-                        <input
-                          type="text"
-                          value={profileName}
-                          onChange={(e) => setProfileName(e.target.value)}
-                          className={`w-full px-3.5 py-2.5 rounded-xl text-xs border focus:outline-none focus:border-red-500 ${darkMode ? "bg-slate-900 border-slate-700 text-white" : "bg-white border-gray-300 text-slate-900"}`}
-                        />
-                      </div>
-
-                      {/* Chọn nhanh Avatar mẫu */}
-                      <div>
-                        <span
-                          className={`block text-[11px] mb-1.5 ${darkMode ? "text-slate-400" : "text-gray-500"}`}
-                        >
-                          Hoặc chọn nhanh avatar mẫu có sẵn:
-                        </span>
-                        <div className="flex gap-2.5">
-                          {[
-                            "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150",
-                            "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150",
-                            "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150",
-                            "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150",
-                            "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=150",
-                          ].map((sampleUrl, idx) => (
-                            <img
-                              key={idx}
-                              src={sampleUrl}
-                              alt="Sample"
-                              onClick={() => {
-                                setHasProfileAvatarError(false);
-                                setProfileAvatar(sampleUrl);
-                                showToast(
-                                  "Đã chọn avatar mẫu! Nhấn 'Lưu Thay Đổi' để áp dụng.",
-                                  "success",
-                                );
-                              }}
-                              className="w-10 h-10 rounded-full object-cover border-2 border-slate-700 hover:border-red-500 cursor-pointer transition transform hover:scale-110 shadow-sm"
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <button
-                        disabled={isSavingProfile}
-                        onClick={async () => {
-                          const newName = profileName.trim();
-                          if (!newName) {
-                            showToast("Vui lòng không để trống tên!", "error");
-                            return;
-                          }
-
-                          setIsSavingProfile(true);
-                          try {
-                            const token = localStorage.getItem("movie_token");
-                            if (!token) {
-                              showToast(
-                                "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
-                                "error",
-                              );
-                              return;
-                            }
-
-                            const res = await fetch(
-                              `${API_URL}/users/update-profile`,
-                              {
-                                method: "PUT",
-                                headers: {
-                                  "Content-Type": "application/json",
-                                  Authorization: `Bearer ${token}`,
-                                },
-                                body: JSON.stringify({
-                                  name: newName,
-                                  avatar: profileAvatar,
-                                }),
-                              },
-                            );
-
-                            const responseText = await res.text();
-                            let data;
-                            try {
-                              data = responseText
-                                ? JSON.parse(responseText)
-                                : {};
-                            } catch {
-                              throw new Error(
-                                `Máy chủ trả về phản hồi không hợp lệ (${res.status}).`,
-                              );
-                            }
-
-                            if (!res.ok) {
-                              throw new Error(
-                                data.message ||
-                                  `Không thể cập nhật hồ sơ (${res.status}).`,
-                              );
-                            }
-
-                            if (!data.user) {
-                              throw new Error(
-                                "Máy chủ không trả về thông tin hồ sơ đã cập nhật.",
-                              );
-                            }
-
-                            setCurrentUser(data.user);
-                            localStorage.setItem(
-                              "movie_user",
-                              JSON.stringify(data.user),
-                            );
-                            showToast(
-                              "🎉 Cập nhật hồ sơ và ảnh đại diện thành công!",
-                              "success",
-                            );
-                          } catch (err) {
-                            console.error("Lỗi cập nhật hồ sơ:", err);
-                            showToast(
-                              err instanceof Error
-                                ? err.message
-                                : "Lỗi kết nối đến máy chủ!",
-                              "error",
-                            );
-                          } finally {
-                            setIsSavingProfile(false);
-                          }
-                        }}
-                        className="w-full mt-2 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold transition cursor-pointer shadow-lg shadow-red-600/25 disabled:opacity-60 disabled:cursor-not-allowed"
-                      >
-                        {isSavingProfile ? "Đang lưu..." : "Lưu Thay Đổi Hồ Sơ"}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Cột 2: Bảo mật & Đổi mật khẩu */}
+              {/* Đổi Mật Khẩu */}
+              {currentUser && (
+                <div className="grid grid-cols-1 md:grid-cols-1 gap-8 max-w-xl mx-auto">
                   <div
                     className={`p-6 rounded-2xl border space-y-4 ${darkMode ? "bg-slate-800/20 border-slate-800" : "bg-gray-50 border-gray-200"}`}
                   >
                     <h4 className="text-sm font-bold text-amber-500 flex items-center gap-2">
-                      🔒 Bảo Mật & Đổi Mật Khẩu
+                      🔒 Đổi Mật Khẩu Tài Khoản
                     </h4>
 
                     <div className="space-y-3">
@@ -732,20 +616,6 @@ function App() {
                       </button>
                     </div>
                   </div>
-                </div>
-              ) : (
-                <div className="text-center py-10 space-y-4">
-                  <p
-                    className={`text-sm ${darkMode ? "text-slate-400" : "text-gray-500"}`}
-                  >
-                    Bạn chưa đăng nhập vào tài khoản.
-                  </p>
-                  <button
-                    onClick={() => setIsAuthOpen(true)}
-                    className="px-6 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition cursor-pointer"
-                  >
-                    Đăng nhập ngay
-                  </button>
                 </div>
               )}
 
@@ -968,7 +838,7 @@ function App() {
                         </div>
                       </div>
 
-                      {/* Các chấm tròn điều hướng thủ công */}
+                      {/* Các chấm tròn điều hướng */}
                       <div className="flex md:flex-col gap-2 items-center justify-center">
                         {bannerMovies.map((_, idx) => (
                           <button
@@ -989,10 +859,16 @@ function App() {
               );
             })()}
 
-          {/* 📍 THANH LỌC THỂ LOẠI NÂNG CAO & SẮP XẾP */}
+          {/* 📍 THANH LỌC NÂNG CAO (Thể loại, Quốc gia, Năm, Sắp xếp) */}
           {activeTab === "home" && (
-            <div className="max-w-7xl mx-auto px-6 pt-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-              <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            <div className="max-w-7xl mx-auto px-6 pt-8 space-y-4">
+              {/* Thể loại */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`text-xs font-semibold mr-2 ${darkMode ? "text-slate-400" : "text-gray-500"}`}
+                >
+                  Thể loại:
+                </span>
                 {categories.map((cat) => (
                   <button
                     key={cat}
@@ -1013,25 +889,79 @@ function App() {
                 ))}
               </div>
 
-              <div className="flex items-center gap-2 w-full md:w-auto justify-end">
-                <span
-                  className={`text-xs font-medium whitespace-nowrap ${darkMode ? "text-slate-400" : "text-gray-500"}`}
-                >
-                  Sắp xếp:
-                </span>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className={`px-3 py-2 rounded-xl text-xs font-semibold border focus:outline-none focus:border-red-500 cursor-pointer ${
-                    darkMode
-                      ? "bg-slate-900 border-slate-800 text-slate-200"
-                      : "bg-white border-gray-200 text-slate-800 shadow-sm"
-                  }`}
-                >
-                  <option value="latest">Mới cập nhật</option>
-                  <option value="az">Tên phim (A - Z)</option>
-                  <option value="rating">Đánh giá cao nhất</option>
-                </select>
+              {/* Quốc gia & Năm & Sắp xếp */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2 border-t border-slate-800/40">
+                <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
+                  {/* Lọc Quốc Gia */}
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-xs font-medium ${darkMode ? "text-slate-400" : "text-gray-500"}`}
+                    >
+                      Quốc gia:
+                    </span>
+                    <select
+                      value={selectedCountry}
+                      onChange={(e) => setSelectedCountry(e.target.value)}
+                      className={`px-3 py-2 rounded-xl text-xs font-semibold border focus:outline-none focus:border-red-500 cursor-pointer ${
+                        darkMode
+                          ? "bg-slate-900 border-slate-800 text-slate-200"
+                          : "bg-white border-gray-200 text-slate-800 shadow-sm"
+                      }`}
+                    >
+                      {countries.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Lọc Năm */}
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-xs font-medium ${darkMode ? "text-slate-400" : "text-gray-500"}`}
+                    >
+                      Năm:
+                    </span>
+                    <select
+                      value={selectedYear}
+                      onChange={(e) => setSelectedYear(e.target.value)}
+                      className={`px-3 py-2 rounded-xl text-xs font-semibold border focus:outline-none focus:border-red-500 cursor-pointer ${
+                        darkMode
+                          ? "bg-slate-900 border-slate-800 text-slate-200"
+                          : "bg-white border-gray-200 text-slate-800 shadow-sm"
+                      }`}
+                    >
+                      {years.map((y) => (
+                        <option key={y} value={y}>
+                          {y}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Sắp xếp */}
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                  <span
+                    className={`text-xs font-medium ${darkMode ? "text-slate-400" : "text-gray-500"}`}
+                  >
+                    Sắp xếp:
+                  </span>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className={`px-3 py-2 rounded-xl text-xs font-semibold border focus:outline-none focus:border-red-500 cursor-pointer ${
+                      darkMode
+                        ? "bg-slate-900 border-slate-800 text-slate-200"
+                        : "bg-white border-gray-200 text-slate-800 shadow-sm"
+                    }`}
+                  >
+                    <option value="latest">Mới cập nhật</option>
+                    <option value="az">Tên phim (A - Z)</option>
+                    <option value="rating">Đánh giá cao nhất</option>
+                  </select>
+                </div>
               </div>
             </div>
           )}
@@ -1120,7 +1050,7 @@ function App() {
         </>
       )}
 
-      {/* 📍 Modal Đăng ký / Đăng nhập OTP */}
+      {/* 📍 Modal Đăng ký / Đăng nhập */}
       <AuthModal
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
@@ -1133,7 +1063,7 @@ function App() {
         }}
       />
 
-      {/* 🌟 Toast Notification hiện đại */}
+      {/* 🌟 Toast Notification */}
       {toast.show && (
         <div
           className={`fixed bottom-6 right-6 z-50 px-5 py-3 rounded-2xl shadow-2xl text-sm font-semibold flex items-center gap-3 transition-all transform animate-bounce ${

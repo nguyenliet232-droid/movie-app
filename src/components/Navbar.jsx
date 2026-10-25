@@ -239,18 +239,36 @@ export default function Navbar({
           <div>
             {currentUser ? (
               <div className="flex items-center gap-3">
+                {/* 🌟 THAY THẾ ICON VẪY TAY BẰNG ẢNH ĐẠI DIỆN THỰC TẾ */}
                 <button
                   onClick={() => setActiveTab("profile")}
-                  className={`flex items-center gap-2 text-sm font-medium px-3 py-1.5 rounded-full transition cursor-pointer ${
+                  className={`flex items-center gap-2.5 px-3 py-1.5 rounded-full transition cursor-pointer border ${
                     activeTab === "profile"
-                      ? "bg-red-600 text-white"
+                      ? "bg-red-600/20 border-red-500 text-white"
                       : darkMode
-                        ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
-                        : "bg-slate-100 hover:bg-slate-200 text-slate-700"
+                        ? "bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-200"
+                        : "bg-slate-100 border-slate-300 hover:bg-slate-200 text-slate-800"
                   }`}
+                  title="Xem trang cá nhân"
                 >
-                  <span>👋 {currentUser.name}</span>
+                  {currentUser?.avatar ? (
+                    <img
+                      src={currentUser.avatar}
+                      alt="Avatar"
+                      className="w-7 h-7 rounded-full object-cover border-2 border-red-500 shadow"
+                    />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-red-600 flex items-center justify-center text-white text-xs font-bold shadow border-2 border-red-500">
+                      {currentUser?.name
+                        ? currentUser.name.charAt(0).toUpperCase()
+                        : "U"}
+                    </div>
+                  )}
+                  <span className="text-xs font-semibold max-w-[90px] truncate hidden sm:inline-block">
+                    {currentUser?.name || "Tài khoản"}
+                  </span>
                 </button>
+
                 <button
                   onClick={onLogout}
                   className={`p-2 rounded-full transition cursor-pointer ${

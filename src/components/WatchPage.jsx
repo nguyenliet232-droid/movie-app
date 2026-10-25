@@ -1,5 +1,12 @@
 import { useState, useEffect } from "react";
-import { ArrowLeft, Star, Send, MessageSquare, Share2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Star,
+  Send,
+  MessageSquare,
+  Share2,
+  Play,
+} from "lucide-react";
 import { readJsonStorage } from "../utils/storage";
 
 export default function WatchPage({
@@ -11,18 +18,21 @@ export default function WatchPage({
   onSelectMovie,
   darkMode,
 }) {
+  // 🌟 State quản lý tập phim đang xem
+  const [currentEpisodeIndex, setCurrentEpisodeIndex] = useState(0);
+
   const [reviews, setReviews] = useState(() => {
     return movie
       ? readJsonStorage(
           `movie_comments_${movie._id}`,
           [
-          {
-            id: 1,
-            userName: "Nguyễn Văn A",
-            rating: 5,
-            text: "Phim xem cực kỳ cuốn và cảm xúc!",
-            date: "19/10/2026",
-          },
+            {
+              id: 1,
+              userName: "Nguyễn Văn A",
+              rating: 5,
+              text: "Phim xem cực kỳ cuốn và cảm xúc!",
+              date: "19/10/2026",
+            },
           ],
           Array.isArray,
         )
@@ -35,10 +45,19 @@ export default function WatchPage({
     if (movie) {
       if (onAddToHistory) onAddToHistory(movie);
       window.scrollTo({ top: 0, behavior: "smooth" });
+      // Reset về tập 1 mỗi khi đổi phim khác
+      setCurrentEpisodeIndex(0);
     }
   }, [movie, onAddToHistory]);
 
   if (!movie) return null;
+
+  // 🌟 Danh sách tập phim (nếu là phim bộ có mảng episodes)
+  const episodesList = movie.episodes || [];
+  const activeVideoUrl =
+    episodesList.length > 0
+      ? episodesList[currentEpisodeIndex]?.videoUrl || movie.videoUrl
+      : movie.videoUrl;
 
   // Lọc phim liên quan (cùng thể loại, khác ID phim hiện tại)
   const relatedMovies = allMovies
@@ -62,7 +81,7 @@ export default function WatchPage({
     return `https://www.youtube.com/embed/${videoId}?autoplay=1&modestbranding=1&rel=0&controls=1`;
   };
 
-  const embedUrl = getEmbedUrl(movie.videoUrl);
+  const embedUrl = getEmbedUrl(activeVideoUrl);
 
   const handleAddReview = (e) => {
     e.preventDefault();
@@ -127,9 +146,10 @@ export default function WatchPage({
       {/* 📍 Khung chính chứa Video và Phim đề xuất bên cạnh */}
       <div className="max-w-7xl mx-auto px-6">
         {/* Trình phát video kích thước lớn */}
-        <div className="aspect-video w-full bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 relative mb-8">
+        <div className="aspect-video w-full bg-black rounded-2xl overflow-hidden shadow-2xl border border-slate-800 relative mb-6">
           {embedUrl.includes("youtube.com") ? (
             <iframe
+              key={activeVideoUrl}
               src={embedUrl}
               title={movie.title || movie.name}
               className="w-full h-full absolute inset-0 border-0"
@@ -138,13 +158,64 @@ export default function WatchPage({
             ></iframe>
           ) : (
             <video
-              src={movie.videoUrl}
+              key={activeVideoUrl}
+              src={activeVideoUrl}
               controls
               autoPlay
               className="w-full h-full object-cover"
             ></video>
           )}
         </div>
+
+        {/* 📺 GIAO DIỆN CHỌN TẬP PHIM (EPISODES) - CHỈ HIỆN KHI CÓ DANH SÁCH TẬP */}
+        {episodesList.length > 0 && (
+          <div
+            className={`p-6 rounded-2xl border mb-8 ${darkMode ? "bg-slate-900/90 border-slate-800" : "bg-white border-gray-200 shadow-md"} space-y-4`}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold flex items-center gap-2 text-red-500">
+                <span>📺 Danh Sách Tập Phim</span>
+                <span className="text-xs bg-red-500/20 text-red-400 px-2.5 py-0.5 rounded-full">
+                  Tổng số: {episodesList.length} tập
+                </span>
+              </h3>
+              <span
+                className={`text-xs ${darkMode ? "text-slate-400" : "text-gray-500"}`}
+              >
+                Đang phát: Tập{" "}
+                {episodesList[currentEpisodeIndex]?.episodeNumber ||
+                  currentEpisodeIndex + 1}
+              </span>
+            </div>
+
+            {/* Danh sách các nút chọn tập */}
+            <div className="flex flex-wrap gap-2.5 max-h-40 overflow-y-auto pr-2">
+              {episodesList.map((ep, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setCurrentEpisodeIndex(idx)}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-2 ${
+                    currentEpisodeIndex === idx
+                      ? "bg-red-600 text-white shadow-lg shadow-red-600/30 ring-2 ring-red-500/50"
+                      : darkMode
+                        ? "bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
+                        : "bg-gray-100 hover:bg-gray-200 text-slate-700 border border-gray-300"
+                  }`}
+                >
+                  <Play
+                    className={`w-3.5 h-3.5 ${currentEpisodeIndex === idx ? "fill-current" : ""}`}
+                  />
+                  <span>Tập {ep.episodeNumber || idx + 1}</span>
+                  {ep.title && (
+                    <span className="opacity-70 font-normal truncate max-w-[100px]">
+                      ({ep.title})
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Chia lưới 2 cột: Cột trái (Thông tin + Bình luận) | Cột phải (Phim đề xuất) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -155,9 +226,17 @@ export default function WatchPage({
                 <h1 className="text-3xl font-extrabold">
                   {movie.title || movie.name}
                 </h1>
-                <span className="bg-red-600/20 text-red-400 border border-red-500/30 text-xs font-semibold px-3.5 py-1.5 rounded-full">
-                  {movie.category || "Hành động"} ({movie.releaseYear || 2024})
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="bg-red-600/20 text-red-400 border border-red-500/30 text-xs font-semibold px-3 py-1 rounded-full">
+                    {movie.category || "Hành động"} ({movie.releaseYear || 2024}
+                    )
+                  </span>
+                  {movie.country && (
+                    <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-semibold px-3 py-1 rounded-full">
+                      {movie.country}
+                    </span>
+                  )}
+                </div>
               </div>
               <p
                 className={`text-sm leading-relaxed ${darkMode ? "text-slate-300" : "text-gray-600"}`}
