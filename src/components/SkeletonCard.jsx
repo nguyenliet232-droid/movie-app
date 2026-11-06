@@ -6,7 +6,7 @@ function SkeletonCard({ darkMode }) {
       }`}
     >
       <div
-        className={`aspect-[2/3] animate-pulse ${
+        className={`aspect-2/3 animate-pulse ${
           darkMode ? "bg-slate-800" : "bg-gray-200"
         }`}
       />

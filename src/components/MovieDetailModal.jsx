@@ -1,8 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, Star, Send, MessageSquare } from "lucide-react";
 import { readJsonStorage } from "../utils/storage";
 
 function MovieDetailModal({ movie, onClose, onAddToHistory, currentUser }) {
+  // 📍 Ref tham chiếu tới thẻ <video> để quản lý thời gian xem dở
+  const videoRef = useRef(null);
+
   const loadReviews = (targetMovie) => {
     if (!targetMovie) return [];
     return readJsonStorage(
@@ -28,14 +31,17 @@ function MovieDetailModal({ movie, onClose, onAddToHistory, currentUser }) {
       Array.isArray,
     );
   };
+
   const [reviewState, setReviewState] = useState(() => ({
     movieId: movie?._id,
     reviews: loadReviews(movie),
   }));
+
   const reviews =
     reviewState.movieId === movie?._id
       ? reviewState.reviews
       : loadReviews(movie);
+
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
 
@@ -44,6 +50,33 @@ function MovieDetailModal({ movie, onClose, onAddToHistory, currentUser }) {
   }, [movie, onAddToHistory]);
 
   if (!movie) return null;
+
+  // 📍 Khóa lưu trữ vị trí xem trong localStorage cho modal phim này
+  const storageKey = `watch_progress_modal_${movie._id}`;
+
+  // 📍 Khi video load xong metadata, tự động tua đến thời gian đã xem dở lần trước
+  const handleLoadedMetadata = () => {
+    if (videoRef.current) {
+      const savedTime = localStorage.getItem(storageKey);
+      if (savedTime && !isNaN(savedTime)) {
+        videoRef.current.currentTime = parseFloat(savedTime);
+      }
+    }
+  };
+
+  // 📍 Khi người dùng đang xem, liên tục cập nhật thời gian vào localStorage
+  const handleTimeUpdate = () => {
+    if (videoRef.current && videoRef.current.currentTime > 0) {
+      if (
+        videoRef.current.duration &&
+        videoRef.current.currentTime < videoRef.current.duration - 2
+      ) {
+        localStorage.setItem(storageKey, videoRef.current.currentTime);
+      } else {
+        localStorage.removeItem(storageKey);
+      }
+    }
+  };
 
   // Gửi bình luận mới
   const handleAddReview = (e) => {
@@ -116,9 +149,12 @@ function MovieDetailModal({ movie, onClose, onAddToHistory, currentUser }) {
               ></iframe>
             ) : (
               <video
+                ref={videoRef}
                 src={movie.videoUrl}
                 controls
                 autoPlay
+                onLoadedMetadata={handleLoadedMetadata}
+                onTimeUpdate={handleTimeUpdate}
                 className="w-full h-full object-cover"
               ></video>
             );

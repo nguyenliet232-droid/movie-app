@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { Play, History, User } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Play, History } from "lucide-react";
 import Navbar from "./components/Navbar";
 import MovieCard from "./components/MovieCard";
 import SkeletonCard from "./components/SkeletonCard";
@@ -9,7 +9,6 @@ import { API_URL } from "./utils/api";
 import { readJsonStorage } from "./utils/storage";
 
 function App() {
-  const avatarFileInputRef = useRef(null);
   const [movies, setMovies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [moviesError, setMoviesError] = useState("");
@@ -23,15 +22,15 @@ function App() {
     ),
   );
 
-  const [profileName, setProfileName] = useState(() => currentUser?.name || "");
-  const [profileAvatar, setProfileAvatar] = useState(
-    () => currentUser?.avatar || "",
-  );
-  const [hasProfileAvatarError, setHasProfileAvatarError] = useState(false);
   const [selectedMovie, setSelectedMovie] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("home"); // "home", "watchlist", "history", "profile", "my-comments", "watch"
+
+  // 🌟 State quản lý Modal VIP & Thanh toán
+  const [isVipModalOpen, setIsVipModalOpen] = useState(false);
+  const [selectedVipPackage, setSelectedVipPackage] = useState("1_month");
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   // 🌟 State quản lý chế độ Sáng / Tối
   const [darkMode, setDarkMode] = useState(() =>
@@ -53,16 +52,30 @@ function App() {
     type: "success",
   });
 
-  const showToast = (message, type = "success") => {
+  const showToast = useCallback((message, type = "success") => {
     setToast({ show: true, message, type });
     setTimeout(() => {
       setToast((prev) => ({ ...prev, show: false }));
     }, 3000);
-  };
+  }, []);
 
   // 🌟 Quản lý danh sách Yêu thích & Lịch sử
   const [favorites, setFavorites] = useState([]);
   const [watchHistory, setWatchHistory] = useState([]);
+
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem("movie_user");
+    localStorage.removeItem("movie_token");
+    localStorage.removeItem("movie_favorites");
+    localStorage.removeItem("movie_watch_history");
+
+    setCurrentUser(null);
+    setFavorites([]);
+    setWatchHistory([]);
+    setActiveTab("home");
+
+    showToast("Đã đăng xuất tài khoản thành công!", "success");
+  }, [showToast]);
 
   // 🌟 Quản lý thể loại đang chọn
   const [selectedCategory, setSelectedCategory] = useState("Tất cả");
@@ -75,7 +88,7 @@ function App() {
     "Khoa học viễn tưởng",
   ];
 
-  // 🌟 BƯỚC 1: State mở rộng Lọc theo Quốc gia và Năm phát hành
+  // 🌟 State mở rộng Lọc theo Quốc gia và Năm phát hành
   const [selectedCountry, setSelectedCountry] = useState("Tất cả");
   const [selectedYear, setSelectedYear] = useState("Tất cả");
 
@@ -151,6 +164,8 @@ function App() {
 
   // 🌟 Đồng bộ dữ liệu Yêu thích và Lịch sử trực tiếp từ MongoDB khi có user đăng nhập
   useEffect(() => {
+    let isCurrent = true;
+
     const fetchUserDataFromDB = async () => {
       const token = localStorage.getItem("movie_token");
       if (!token || !currentUser) {
@@ -163,10 +178,33 @@ function App() {
         const res = await fetch(`${API_URL}/users/sync-data`, {
           headers: { Authorization: `Bearer ${token}` },
         });
+
+        if (res.status === 401) {
+          handleLogout();
+          setIsAuthOpen(true);
+          showToast(
+            "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại!",
+            "error",
+          );
+          return;
+        }
+
         if (res.ok) {
           const data = await res.json();
-          setFavorites(data.favorites || []);
-          setWatchHistory(data.watchHistory || []);
+          if (
+            !Array.isArray(data.favorites) ||
+            !Array.isArray(data.watchHistory)
+          ) {
+            throw new TypeError("User sync API returned invalid data.");
+          }
+          if (isCurrent) {
+            setFavorites(data.favorites);
+            setWatchHistory(data.watchHistory);
+          }
+        } else {
+          throw new Error(
+            `User sync request failed with status ${res.status}.`,
+          );
         }
       } catch (err) {
         console.error("Lỗi đồng bộ dữ liệu từ database:", err);
@@ -174,24 +212,11 @@ function App() {
     };
 
     fetchUserDataFromDB();
-  }, [currentUser]);
 
-  const handleLogout = () => {
-    localStorage.removeItem("movie_user");
-    localStorage.removeItem("movie_token");
-    localStorage.removeItem("movie_favorites");
-    localStorage.removeItem("movie_watch_history");
-
-    setCurrentUser(null);
-    setFavorites([]);
-    setWatchHistory([]);
-    setProfileName("");
-    setProfileAvatar("");
-    setHasProfileAvatarError(false);
-    setActiveTab("home");
-
-    showToast("Đã đăng xuất tài khoản thành công!", "success");
-  };
+    return () => {
+      isCurrent = false;
+    };
+  }, [currentUser, handleLogout, showToast]);
 
   const handleToggleFavorite = async (movie) => {
     if (!currentUser) {
@@ -206,16 +231,9 @@ function App() {
       : [...favorites, movie];
     setFavorites(updatedFavs);
 
-    showToast(
-      exists
-        ? "Đã xóa phim khỏi danh sách yêu thích"
-        : "Đã thêm phim vào danh sách yêu thích ❤️",
-      exists ? "error" : "success",
-    );
-
     try {
       const token = localStorage.getItem("movie_token");
-      await fetch(`${API_URL}/users/favorites`, {
+      const res = await fetch(`${API_URL}/users/favorites`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -223,8 +241,40 @@ function App() {
         },
         body: JSON.stringify({ movieId: movie._id }),
       });
+
+      if (res.status === 401) {
+        handleLogout();
+        setIsAuthOpen(true);
+        showToast(
+          "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại!",
+          "error",
+        );
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(`Favorite request failed with status ${res.status}.`);
+      }
+
+      showToast(
+        exists
+          ? "Đã xóa phim khỏi danh sách yêu thích"
+          : "Đã thêm phim vào danh sách yêu thích ❤️",
+        exists ? "error" : "success",
+      );
     } catch (err) {
       console.error("Lỗi lưu yêu thích lên server:", err);
+      setFavorites((currentFavorites) =>
+        exists
+          ? currentFavorites.some((item) => item._id === movie._id)
+            ? currentFavorites
+            : [...currentFavorites, movie]
+          : currentFavorites.filter((item) => item._id !== movie._id),
+      );
+      showToast(
+        "Không thể cập nhật danh sách yêu thích. Vui lòng thử lại.",
+        "error",
+      );
     }
   };
 
@@ -239,7 +289,7 @@ function App() {
 
       try {
         const token = localStorage.getItem("movie_token");
-        await fetch(`${API_URL}/users/history`, {
+        const res = await fetch(`${API_URL}/users/history`, {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
@@ -247,15 +297,36 @@ function App() {
           },
           body: JSON.stringify({ movieId: movie._id }),
         });
+
+        if (res.status === 401) {
+          handleLogout();
+          setIsAuthOpen(true);
+          showToast(
+            "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại!",
+            "error",
+          );
+          return;
+        }
+
+        if (!res.ok) {
+          throw new Error(
+            `Watch history request failed with status ${res.status}.`,
+          );
+        }
       } catch (err) {
         console.error("Lỗi lưu lịch sử lên server:", err);
+        showToast("Không thể đồng bộ lịch sử xem với máy chủ.", "error");
       }
     },
-    [currentUser],
+    [currentUser, handleLogout, showToast],
   );
 
-  // 🌟 Hàm hỗ trợ cập nhật trực tiếp tên hoặc ảnh đại diện lên MongoDB
-  const handleUpdateProfileDirectly = async (newName, newAvatar) => {
+  const handleUpdateProfileDirectly = async (
+    newName,
+    newAvatar,
+    newBio,
+    newBannerUrl,
+  ) => {
     try {
       const token = localStorage.getItem("movie_token");
       const res = await fetch(`${API_URL}/users/update-profile`, {
@@ -267,8 +338,20 @@ function App() {
         body: JSON.stringify({
           name: newName,
           avatar: newAvatar,
+          bio: newBio,
+          bannerUrl: newBannerUrl,
         }),
       });
+
+      if (res.status === 401) {
+        handleLogout();
+        setIsAuthOpen(true);
+        showToast(
+          "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại!",
+          "error",
+        );
+        return;
+      }
 
       const data = await res.json();
       if (res.ok) {
@@ -284,7 +367,43 @@ function App() {
     }
   };
 
+  // 🌟 Hàm xử lý gửi yêu cầu nâng cấp VIP chờ Admin duyệt
+  const handleUpgradeVip = async () => {
+    setIsProcessingPayment("loading");
+    try {
+      const token = localStorage.getItem("movie_token");
+      const res = await fetch(`${API_URL}/users/request-vip`, {
+        method: "POST", // 🌟 Sửa từ PUT thành POST
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ packageType: selectedVipPackage }),
+      });
+
+      const data = await res.json();
+      setIsProcessingPayment(false);
+      setIsVipModalOpen(false);
+
+      if (res.ok) {
+        showToast("⏳ " + data.message, "success");
+      } else {
+        showToast(data.message || "Không thể gửi yêu cầu!", "error");
+      }
+    } catch {
+      setIsProcessingPayment(false);
+      showToast("Lỗi kết nối đến máy chủ!", "error");
+    }
+  };
+
   const handleOpenWatchPage = (movie) => {
+    // 🌟 Kiểm tra nếu phim yêu cầu VIP nhưng user chưa mua VIP
+    if (movie.isVipOnly && !currentUser?.isVip) {
+      showToast("⭐ Bộ phim này chỉ dành riêng cho tài khoản VIP!", "error");
+      setIsVipModalOpen(true); // Tự động bật Modal chọn gói VIP lên
+      return;
+    }
+
     setSelectedMovie(movie);
     handleAddToHistory(movie);
     setActiveTab("watch");
@@ -297,7 +416,6 @@ function App() {
     return movies;
   };
 
-  // 🌟 Lọc phim nâng cao theo Từ khóa, Thể loại, Quốc gia và Năm
   const filteredMovies = getDisplayMovies().filter((movie) => {
     const title = movie.title || movie.name || "";
     const matchesSearch = title
@@ -319,7 +437,7 @@ function App() {
     if (sortBy === "az") {
       return titleA.localeCompare(titleB);
     } else if (sortBy === "rating") {
-      return (b.rating || 5) - (a.rating || 5);
+      return (b.rating ?? 5) - (a.rating ?? 5);
     } else {
       return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
     }
@@ -330,7 +448,9 @@ function App() {
 
   return (
     <div
-      className={`min-h-screen transition-colors duration-300 ${darkMode ? "bg-slate-950 text-white" : "bg-gray-50 text-slate-900"}`}
+      className={`min-h-screen transition-colors duration-300 ${
+        darkMode ? "bg-slate-950 text-white" : "bg-gray-50 text-slate-900"
+      }`}
     >
       {/* 📍 Navbar Header */}
       <Navbar
@@ -356,22 +476,63 @@ function App() {
           movie={selectedMovie}
           onBack={() => setActiveTab("home")}
           currentUser={currentUser}
-          onAddToHistory={handleAddToHistory}
           allMovies={movies}
           onSelectMovie={handleOpenWatchPage}
           darkMode={darkMode}
         />
       ) : activeTab === "profile" ? (
-        <div className="max-w-5xl mx-auto px-6 py-10">
+        <div className="max-w-5xl mx-auto px-6 py-10 animate-fadeIn">
           <div
-            className={`${darkMode ? "bg-slate-900 border-slate-800 text-white" : "bg-white border-gray-200 text-slate-900 shadow-xl"} border rounded-3xl overflow-hidden transition-colors`}
+            className={`${
+              darkMode
+                ? "bg-slate-900 border-slate-800 text-white"
+                : "bg-white border-gray-200 text-slate-900 shadow-xl"
+            } border rounded-3xl overflow-hidden transition-colors`}
           >
-            {/* 🌟 BANNER TÍCH HỢP CHỈNH SỬA TRỰC TIẾP */}
-            <div className="h-44 bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 relative overflow-hidden">
-              <div className="absolute inset-0 bg-black/20 backdrop-blur-[2px]"></div>
+            {/* 🌟 NÂNG CẤP BANNER: Cho phép đổi ảnh bìa nền */}
+            <div
+              className="h-52 relative overflow-hidden bg-cover bg-center transition-all duration-500 group/banner"
+              style={{
+                backgroundImage: `linear-gradient(to bottom, rgba(0,0,0,0.2), rgba(0,0,0,0.7)), url(${
+                  currentUser?.bannerUrl ||
+                  "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1200"
+                })`,
+              }}
+            >
+              <div className="absolute top-4 right-4 z-10">
+                <button
+                  onClick={() =>
+                    document.getElementById("bannerBgInput").click()
+                  }
+                  className="bg-black/50 hover:bg-black/80 text-white px-3.5 py-1.5 rounded-xl text-xs font-semibold backdrop-blur-md transition flex items-center gap-1.5 border border-white/10 cursor-pointer shadow-lg"
+                >
+                  🖼️ Đổi ảnh bìa
+                </button>
+                <input
+                  type="file"
+                  id="bannerBgInput"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onloadend = async () => {
+                        await handleUpdateProfileDirectly(
+                          currentUser?.name,
+                          currentUser?.avatar,
+                          currentUser?.bio,
+                          reader.result,
+                        );
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }}
+                />
+              </div>
 
+              {/* Thông tin Avatar & Tên */}
               <div className="absolute bottom-4 left-8 flex flex-col sm:flex-row items-start sm:items-center gap-5 w-full pr-10">
-                {/* 1. Click vào ảnh đại diện để đổi ảnh từ máy */}
                 <div
                   className="relative group cursor-pointer"
                   onClick={() =>
@@ -398,7 +559,6 @@ function App() {
                   <span className="absolute bottom-1 right-1 w-5 h-5 bg-emerald-500 border-4 border-slate-900 rounded-full"></span>
                 </div>
 
-                {/* Input chọn file ẩn cho Banner */}
                 <input
                   type="file"
                   id="bannerFileAvatarInput"
@@ -409,10 +569,11 @@ function App() {
                     if (file) {
                       const reader = new FileReader();
                       reader.onloadend = async () => {
-                        const base64String = reader.result;
                         await handleUpdateProfileDirectly(
                           currentUser?.name,
-                          base64String,
+                          reader.result,
+                          currentUser?.bio,
+                          currentUser?.bannerUrl,
                         );
                       };
                       reader.readAsDataURL(file);
@@ -420,45 +581,145 @@ function App() {
                   }}
                 />
 
-                {/* 2. Click vào tên để sửa tên trực tiếp */}
                 <div className="text-white drop-shadow-md space-y-1 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3 flex-wrap">
                     <input
                       type="text"
                       defaultValue={currentUser?.name || ""}
-                      id="bannerNameInput"
                       onBlur={async (e) => {
                         const newName = e.target.value.trim();
                         if (newName && newName !== currentUser?.name) {
                           await handleUpdateProfileDirectly(
                             newName,
                             currentUser?.avatar,
+                            currentUser?.bio,
+                            currentUser?.bannerUrl,
                           );
                         }
                       }}
                       className="bg-transparent hover:bg-white/10 focus:bg-slate-900/80 px-2.5 py-1 rounded-xl text-2xl font-extrabold focus:outline-none focus:ring-2 focus:ring-red-500 transition w-full sm:w-auto max-w-xs"
                       placeholder="Nhập tên của bạn..."
-                      title="Bấm vào tên để sửa, bấm ra ngoài để lưu"
                     />
-                    <span className="text-xs bg-black/30 px-2 py-0.5 rounded-md text-slate-300 hidden sm:inline-block">
+
+                    {/* Huy hiệu hiển thị theo trạng thái VIP thực tế */}
+                    <span
+                      className={`font-extrabold text-[10px] px-2.5 py-1 rounded-full shadow-md uppercase tracking-wider flex items-center gap-1 ${
+                        currentUser?.isVip
+                          ? "bg-linear-to-r from-amber-500 to-yellow-500 text-slate-950"
+                          : "bg-slate-800 text-slate-300 border border-slate-700"
+                      }`}
+                    >
+                      {currentUser?.isVip
+                        ? "👑 VIP Diamond"
+                        : "⭐ Thành Viên Thường"}
+                    </span>
+
+                    <span className="text-xs bg-black/40 px-2.5 py-1 rounded-md text-slate-300 hidden sm:inline-block backdrop-blur-sm">
                       ✏️ Bấm vào tên để sửa
                     </span>
                   </div>
+
                   <p className="text-xs text-white/80 px-2.5">
                     {currentUser?.email}
                   </p>
+
+                  {/* Tiểu sử (Bio) */}
+                  <div className="px-2.5 pt-1">
+                    <input
+                      type="text"
+                      defaultValue={
+                        currentUser?.bio ||
+                        "✨ Đam mê điện ảnh, thích xem phim hành động và khoa học viễn tưởng..."
+                      }
+                      onBlur={async (e) => {
+                        const newBio = e.target.value.trim();
+                        if (newBio !== currentUser?.bio) {
+                          await handleUpdateProfileDirectly(
+                            currentUser?.name,
+                            currentUser?.avatar,
+                            newBio,
+                            currentUser?.bannerUrl,
+                          );
+                        }
+                      }}
+                      className="bg-transparent hover:bg-white/10 focus:bg-slate-900/80 px-2 py-0.5 rounded-lg text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-red-500 transition w-full max-w-md"
+                      placeholder="Nhập tiểu sử ngắn của bạn..."
+                      title="Bấm để sửa tiểu sử"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Nội dung chi tiết hồ sơ bên dưới */}
             <div className="p-8 space-y-8 mt-2">
-              {/* Chọn nhanh Avatar mẫu */}
+              {/* 🌟 THẺ THÀNH VIÊN VIP (TỰ ĐỘNG THAY ĐỔI THEO TRẠNG THÁI TÀI KHOẢN) */}
               <div
-                className={`p-4 rounded-2xl border ${darkMode ? "bg-slate-800/30 border-slate-800" : "bg-gray-50 border-gray-200"} flex flex-col sm:flex-row items-center justify-between gap-4`}
+                className={`relative p-6 rounded-3xl text-white shadow-2xl overflow-hidden border ${
+                  currentUser?.isVip
+                    ? "bg-linear-to-r from-amber-600 via-yellow-600 to-amber-700 border-yellow-400/30"
+                    : "bg-linear-to-r from-slate-800 via-slate-900 to-slate-950 border-slate-700"
+                }`}
+              >
+                <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
+                <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`font-extrabold text-[11px] px-3 py-1 rounded-full uppercase tracking-widest border ${
+                          currentUser?.isVip
+                            ? "bg-black/30 text-yellow-300 border-yellow-300/30"
+                            : "bg-red-500/20 text-red-400 border-red-500/30"
+                        }`}
+                      >
+                        {currentUser?.isVip
+                          ? "👑 VIP Diamond Member"
+                          : "⭐ Thành Viên Thường"}
+                      </span>
+                      <span className="text-xs text-slate-300">
+                        Trạng thái:{" "}
+                        {currentUser?.isVip
+                          ? "Đang hoạt động"
+                          : "Chưa kích hoạt"}
+                      </span>
+                    </div>
+                    <h3 className="text-xl font-extrabold tracking-wide pt-1">
+                      {currentUser?.isVip
+                        ? "Tài khoản xem phim không giới hạn 4K"
+                        : "Nâng cấp VIP để mở khóa kho phim độc quyền"}
+                    </h3>
+                    <p className="text-xs text-slate-300">
+                      {currentUser?.isVip
+                        ? "Bạn đang tận hưởng trọn vẹn đặc quyền xem phim không quảng cáo."
+                        : "Xem phim bom tấn chất lượng cao, không bị làm phiền bởi quảng cáo."}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setIsVipModalOpen(true)}
+                    className={`px-6 py-3 font-bold rounded-2xl text-xs transition shadow-xl cursor-pointer transform hover:scale-105 whitespace-nowrap ${
+                      currentUser?.isVip
+                        ? "bg-slate-950 hover:bg-slate-900 text-yellow-400 border border-yellow-400/40"
+                        : "bg-linear-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white shadow-red-600/30"
+                    }`}
+                  >
+                    {currentUser?.isVip
+                      ? "✨ Quản Lý Gói VIP"
+                      : "🚀 Nâng Cấp VIP Ngay"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Chọn nhanh avatar mẫu */}
+              <div
+                className={`p-4 rounded-2xl border ${
+                  darkMode
+                    ? "bg-slate-800/30 border-slate-800"
+                    : "bg-gray-50 border-gray-200"
+                } flex flex-col sm:flex-row items-center justify-between gap-4`}
               >
                 <span
-                  className={`text-xs font-medium ${darkMode ? "text-slate-300" : "text-gray-700"}`}
+                  className={`text-xs font-medium ${
+                    darkMode ? "text-slate-300" : "text-gray-700"
+                  }`}
                 >
                   🌟 Hoặc chọn nhanh avatar mẫu có sẵn:
                 </span>
@@ -478,6 +739,8 @@ function App() {
                         await handleUpdateProfileDirectly(
                           currentUser?.name,
                           sampleUrl,
+                          currentUser?.bio,
+                          currentUser?.bannerUrl,
                         );
                       }}
                       className="w-10 h-10 rounded-full object-cover border-2 border-slate-700 hover:border-red-500 cursor-pointer transition transform hover:scale-110 shadow-md"
@@ -487,14 +750,20 @@ function App() {
                 </div>
               </div>
 
-              {/* Thẻ thống kê nhanh */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Thống kê chi tiết */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div
-                  className={`p-5 rounded-2xl border ${darkMode ? "bg-slate-800/40 border-slate-800" : "bg-gray-50 border-gray-200"} flex items-center justify-between`}
+                  className={`p-5 rounded-2xl border ${
+                    darkMode
+                      ? "bg-slate-800/40 border-slate-800"
+                      : "bg-gray-50 border-gray-200"
+                  } flex items-center justify-between`}
                 >
                   <div>
                     <span
-                      className={`text-xs block font-medium ${darkMode ? "text-slate-400" : "text-gray-500"}`}
+                      className={`text-xs block font-medium ${
+                        darkMode ? "text-slate-400" : "text-gray-500"
+                      }`}
                     >
                       Phim yêu thích đã lưu
                     </span>
@@ -508,11 +777,17 @@ function App() {
                 </div>
 
                 <div
-                  className={`p-5 rounded-2xl border ${darkMode ? "bg-slate-800/40 border-slate-800" : "bg-gray-50 border-gray-200"} flex items-center justify-between`}
+                  className={`p-5 rounded-2xl border ${
+                    darkMode
+                      ? "bg-slate-800/40 border-slate-800"
+                      : "bg-gray-50 border-gray-200"
+                  } flex items-center justify-between`}
                 >
                   <div>
                     <span
-                      className={`text-xs block font-medium ${darkMode ? "text-slate-400" : "text-gray-500"}`}
+                      className={`text-xs block font-medium ${
+                        darkMode ? "text-slate-400" : "text-gray-500"
+                      }`}
                     >
                       Lịch sử xem gần đây
                     </span>
@@ -524,13 +799,41 @@ function App() {
                     🕒
                   </div>
                 </div>
+
+                <div
+                  className={`p-5 rounded-2xl border ${
+                    darkMode
+                      ? "bg-slate-800/40 border-slate-800"
+                      : "bg-gray-50 border-gray-200"
+                  } flex items-center justify-between`}
+                >
+                  <div>
+                    <span
+                      className={`text-xs block font-medium ${
+                        darkMode ? "text-slate-400" : "text-gray-500"
+                      }`}
+                    >
+                      Cấp độ tài khoản
+                    </span>
+                    <span className="text-xl font-bold text-emerald-500 mt-1 inline-block">
+                      {currentUser?.isVip ? "VIP Diamond" : "Thành Viên Thường"}
+                    </span>
+                  </div>
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 text-xl font-bold">
+                    ⭐
+                  </div>
+                </div>
               </div>
 
-              {/* Đổi Mật Khẩu */}
+              {/* Đổi mật khẩu */}
               {currentUser && (
-                <div className="grid grid-cols-1 md:grid-cols-1 gap-8 max-w-xl mx-auto">
+                <div className="grid grid-cols-1 gap-8 max-w-xl mx-auto">
                   <div
-                    className={`p-6 rounded-2xl border space-y-4 ${darkMode ? "bg-slate-800/20 border-slate-800" : "bg-gray-50 border-gray-200"}`}
+                    className={`p-6 rounded-2xl border space-y-4 ${
+                      darkMode
+                        ? "bg-slate-800/20 border-slate-800"
+                        : "bg-gray-50 border-gray-200"
+                    }`}
                   >
                     <h4 className="text-sm font-bold text-amber-500 flex items-center gap-2">
                       🔒 Đổi Mật Khẩu Tài Khoản
@@ -539,7 +842,9 @@ function App() {
                     <div className="space-y-3">
                       <div>
                         <label
-                          className={`block text-xs mb-1 font-medium ${darkMode ? "text-slate-400" : "text-gray-600"}`}
+                          className={`block text-xs mb-1 font-medium ${
+                            darkMode ? "text-slate-400" : "text-gray-600"
+                          }`}
                         >
                           Mật khẩu hiện tại
                         </label>
@@ -547,12 +852,18 @@ function App() {
                           type="password"
                           placeholder="••••••••"
                           id="oldPasswordInput"
-                          className={`w-full px-3.5 py-2.5 rounded-xl text-xs border focus:outline-none focus:border-red-500 ${darkMode ? "bg-slate-900 border-slate-700 text-white" : "bg-white border-gray-300 text-slate-900"}`}
+                          className={`w-full px-3.5 py-2.5 rounded-xl text-xs border focus:outline-none focus:border-red-500 ${
+                            darkMode
+                              ? "bg-slate-900 border-slate-700 text-white"
+                              : "bg-white border-gray-300 text-slate-900"
+                          }`}
                         />
                       </div>
                       <div>
                         <label
-                          className={`block text-xs mb-1 font-medium ${darkMode ? "text-slate-400" : "text-gray-600"}`}
+                          className={`block text-xs mb-1 font-medium ${
+                            darkMode ? "text-slate-400" : "text-gray-600"
+                          }`}
                         >
                           Mật khẩu mới (tối thiểu 6 ký tự)
                         </label>
@@ -560,12 +871,18 @@ function App() {
                           type="password"
                           placeholder="••••••••"
                           id="newPasswordInput"
-                          className={`w-full px-3.5 py-2.5 rounded-xl text-xs border focus:outline-none focus:border-red-500 ${darkMode ? "bg-slate-900 border-slate-700 text-white" : "bg-white border-gray-300 text-slate-900"}`}
+                          className={`w-full px-3.5 py-2.5 rounded-xl text-xs border focus:outline-none focus:border-red-500 ${
+                            darkMode
+                              ? "bg-slate-900 border-slate-700 text-white"
+                              : "bg-white border-gray-300 text-slate-900"
+                          }`}
                         />
                       </div>
                       <div>
                         <label
-                          className={`block text-xs mb-1 font-medium ${darkMode ? "text-slate-400" : "text-gray-600"}`}
+                          className={`block text-xs mb-1 font-medium ${
+                            darkMode ? "text-slate-400" : "text-gray-600"
+                          }`}
                         >
                           Xác nhận mật khẩu mới
                         </label>
@@ -573,12 +890,16 @@ function App() {
                           type="password"
                           placeholder="••••••••"
                           id="confirmPasswordInput"
-                          className={`w-full px-3.5 py-2.5 rounded-xl text-xs border focus:outline-none focus:border-red-500 ${darkMode ? "bg-slate-900 border-slate-700 text-white" : "bg-white border-gray-300 text-slate-900"}`}
+                          className={`w-full px-3.5 py-2.5 rounded-xl text-xs border focus:outline-none focus:border-red-500 ${
+                            darkMode
+                              ? "bg-slate-900 border-slate-700 text-white"
+                              : "bg-white border-gray-300 text-slate-900"
+                          }`}
                         />
                       </div>
 
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           const oldPass =
                             document.getElementById("oldPasswordInput").value;
                           const newPass =
@@ -605,21 +926,57 @@ function App() {
                             showToast("Mật khẩu xác nhận không khớp!", "error");
                             return;
                           }
-                          showToast(
-                            "Chức năng đổi mật khẩu đang được phát triển.",
-                            "error",
-                          );
+
+                          try {
+                            const token = localStorage.getItem("movie_token");
+                            const res = await fetch(
+                              `${API_URL}/users/change-password`,
+                              {
+                                method: "PUT",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                  Authorization: `Bearer ${token}`,
+                                },
+                                body: JSON.stringify({
+                                  oldPassword: oldPass,
+                                  newPassword: newPass,
+                                }),
+                              },
+                            );
+                            const data = await res.json();
+                            if (res.ok) {
+                              showToast(
+                                "✨ Đổi mật khẩu thành công!",
+                                "success",
+                              );
+                              document.getElementById(
+                                "oldPasswordInput",
+                              ).value = "";
+                              document.getElementById(
+                                "newPasswordInput",
+                              ).value = "";
+                              document.getElementById(
+                                "confirmPasswordInput",
+                              ).value = "";
+                            } else {
+                              showToast(
+                                data.message || "Đổi mật khẩu thất bại!",
+                                "error",
+                              );
+                            }
+                          } catch {
+                            showToast("Lỗi kết nối máy chủ!", "error");
+                          }
                         }}
-                        className="w-full mt-2 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold transition cursor-pointer"
+                        className="w-full mt-2 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold transition cursor-pointer shadow-lg shadow-red-600/20"
                       >
-                        Cập Nhật Mật Khẩu
+                        Cập Nhật Mật Khẩu Mới
                       </button>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Nút hành động cuối trang */}
               <div className="pt-4 border-t border-slate-800/80 flex items-center justify-between">
                 <button
                   onClick={() => setActiveTab("home")}
@@ -643,7 +1000,9 @@ function App() {
         <div className="max-w-7xl mx-auto px-6 py-12 space-y-6">
           <div className="flex items-center justify-between">
             <h2
-              className={`text-2xl font-bold flex items-center gap-2 ${darkMode ? "text-white" : "text-slate-900"}`}
+              className={`text-2xl font-bold flex items-center gap-2 ${
+                darkMode ? "text-white" : "text-slate-900"
+              }`}
             >
               <History className="w-6 h-6 text-amber-500" /> Lịch Sử Xem Gần Đây
               ({watchHistory.length})
@@ -670,7 +1029,9 @@ function App() {
 
           {watchHistory.length === 0 ? (
             <div
-              className={`text-center py-20 space-y-4 ${darkMode ? "text-slate-400" : "text-gray-500"}`}
+              className={`text-center py-20 space-y-4 ${
+                darkMode ? "text-slate-400" : "text-gray-500"
+              }`}
             >
               <p>Bạn chưa xem bộ phim nào gần đây.</p>
               <button
@@ -697,7 +1058,11 @@ function App() {
       ) : activeTab === "my-comments" ? (
         <div className="max-w-4xl mx-auto px-6 py-12 space-y-6">
           <div
-            className={`${darkMode ? "bg-slate-900 border-slate-800 text-white" : "bg-white border-gray-200 text-slate-900 shadow-xl"} border rounded-2xl p-8 space-y-6`}
+            className={`${
+              darkMode
+                ? "bg-slate-900 border-slate-800 text-white"
+                : "bg-white border-gray-200 text-slate-900 shadow-xl"
+            } border rounded-2xl p-8 space-y-6`}
           >
             <h2 className="text-2xl font-bold flex items-center gap-3 text-red-500">
               💬 Bình Luận & Đánh Giá Của Bạn
@@ -705,7 +1070,9 @@ function App() {
 
             {!currentUser ? (
               <p
-                className={`text-xs ${darkMode ? "text-slate-400" : "text-gray-500"}`}
+                className={`text-xs ${
+                  darkMode ? "text-slate-400" : "text-gray-500"
+                }`}
               >
                 Vui lòng đăng nhập để xem lịch sử bình luận.
               </p>
@@ -731,7 +1098,9 @@ function App() {
                   if (userComments.length === 0) {
                     return (
                       <div
-                        className={`text-center py-12 space-y-3 ${darkMode ? "text-slate-400" : "text-gray-500"}`}
+                        className={`text-center py-12 space-y-3 ${
+                          darkMode ? "text-slate-400" : "text-gray-500"
+                        }`}
                       >
                         <p>Bạn chưa đăng bình luận đánh giá nào.</p>
                         <button
@@ -749,7 +1118,11 @@ function App() {
                       {userComments.map((item, index) => (
                         <div
                           key={index}
-                          className={`p-4 rounded-xl border space-y-1 ${darkMode ? "bg-slate-800/40 border-slate-700/50" : "bg-gray-50 border-gray-200"}`}
+                          className={`p-4 rounded-xl border space-y-1 ${
+                            darkMode
+                              ? "bg-slate-800/40 border-slate-700/50"
+                              : "bg-gray-50 border-gray-200"
+                          }`}
                         >
                           <div className="flex justify-between items-center text-xs">
                             <span className="font-bold text-red-500">
@@ -784,14 +1157,14 @@ function App() {
                 bannerMovies[currentBannerIndex] || movies[0];
 
               return (
-                <div className="relative h-[400px] sm:h-[450px] md:h-[480px] w-full bg-slate-900 overflow-hidden transition-all duration-700">
+                <div className="relative h-100 sm:h-112.5 md:h-120 w-full bg-slate-900 overflow-hidden transition-all duration-700">
                   <img
                     key={currentBannerMovie._id}
                     src={currentBannerMovie.posterUrl}
                     alt={currentBannerMovie.title || currentBannerMovie.name}
                     className="w-full h-full object-cover opacity-35 blur-sm transition-opacity duration-1000 animate-fadeIn"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-transparent flex items-center">
+                  <div className="absolute inset-0 bg-linear-to-t from-slate-950 via-slate-950/60 to-transparent flex items-center">
                     <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center gap-8 w-full justify-between">
                       <div className="flex items-center gap-8">
                         <img
@@ -859,13 +1232,14 @@ function App() {
               );
             })()}
 
-          {/* 📍 THANH LỌC NÂNG CAO (Thể loại, Quốc gia, Năm, Sắp xếp) */}
+          {/* 📍 THANH LỌC NÂNG CAO */}
           {activeTab === "home" && (
             <div className="max-w-7xl mx-auto px-6 pt-8 space-y-4">
-              {/* Thể loại */}
               <div className="flex flex-wrap items-center gap-2">
                 <span
-                  className={`text-xs font-semibold mr-2 ${darkMode ? "text-slate-400" : "text-gray-500"}`}
+                  className={`text-xs font-semibold mr-2 ${
+                    darkMode ? "text-slate-400" : "text-gray-500"
+                  }`}
                 >
                   Thể loại:
                 </span>
@@ -878,7 +1252,7 @@ function App() {
                     }}
                     className={`px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer transform hover:scale-105 ${
                       selectedCategory === cat && activeTab === "home"
-                        ? "bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-lg shadow-red-600/30"
+                        ? "bg-linear-to-r from-red-600 to-rose-600 text-white shadow-lg shadow-red-600/30"
                         : darkMode
                           ? "bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800"
                           : "bg-white text-slate-600 hover:bg-gray-100 border border-gray-200 shadow-sm"
@@ -889,13 +1263,13 @@ function App() {
                 ))}
               </div>
 
-              {/* Quốc gia & Năm & Sắp xếp */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-2 border-t border-slate-800/40">
                 <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
-                  {/* Lọc Quốc Gia */}
                   <div className="flex items-center gap-2">
                     <span
-                      className={`text-xs font-medium ${darkMode ? "text-slate-400" : "text-gray-500"}`}
+                      className={`text-xs font-medium ${
+                        darkMode ? "text-slate-400" : "text-gray-500"
+                      }`}
                     >
                       Quốc gia:
                     </span>
@@ -916,10 +1290,11 @@ function App() {
                     </select>
                   </div>
 
-                  {/* Lọc Năm */}
                   <div className="flex items-center gap-2">
                     <span
-                      className={`text-xs font-medium ${darkMode ? "text-slate-400" : "text-gray-500"}`}
+                      className={`text-xs font-medium ${
+                        darkMode ? "text-slate-400" : "text-gray-500"
+                      }`}
                     >
                       Năm:
                     </span>
@@ -941,10 +1316,11 @@ function App() {
                   </div>
                 </div>
 
-                {/* Sắp xếp */}
                 <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                   <span
-                    className={`text-xs font-medium ${darkMode ? "text-slate-400" : "text-gray-500"}`}
+                    className={`text-xs font-medium ${
+                      darkMode ? "text-slate-400" : "text-gray-500"
+                    }`}
                   >
                     Sắp xếp:
                   </span>
@@ -969,10 +1345,14 @@ function App() {
           <main className="max-w-7xl mx-auto px-6 py-6 animate-fadeIn">
             <div className="flex items-center justify-between mb-6">
               <h2
-                className={`text-xl font-bold flex items-center gap-2 ${darkMode ? "text-slate-100" : "text-slate-800"}`}
+                className={`text-xl font-bold flex items-center gap-2 ${
+                  darkMode ? "text-slate-100" : "text-slate-800"
+                }`}
               >
                 {activeTab === "home" &&
-                  `🎬 Danh Sách Phim ${selectedCategory !== "Tất cả" ? `- ${selectedCategory}` : ""}`}
+                  `🎬 Danh Sách Phim ${
+                    selectedCategory !== "Tất cả" ? `- ${selectedCategory}` : ""
+                  }`}
                 {activeTab === "watchlist" &&
                   `❤️ Danh Sách Phim Yêu Thích (${favorites.length})`}
               </h2>
@@ -996,13 +1376,17 @@ function App() {
             ) : activeTab === "home" && moviesError ? (
               <div
                 role="alert"
-                className={`text-center py-20 space-y-3 ${darkMode ? "text-slate-400" : "text-gray-500"}`}
+                className={`text-center py-20 space-y-3 ${
+                  darkMode ? "text-slate-400" : "text-gray-500"
+                }`}
               >
                 <p>{moviesError}</p>
               </div>
             ) : currentMovies.length === 0 ? (
               <div
-                className={`text-center py-20 space-y-3 ${darkMode ? "text-slate-500" : "text-gray-400"}`}
+                className={`text-center py-20 space-y-3 ${
+                  darkMode ? "text-slate-500" : "text-gray-400"
+                }`}
               >
                 <p>Không tìm thấy bộ phim nào phù hợp.</p>
                 <button
@@ -1019,6 +1403,8 @@ function App() {
                     <MovieCard
                       key={movie._id}
                       movie={movie}
+                      currentUser={currentUser}
+                      a
                       onClick={() => handleOpenWatchPage(movie)}
                       isFavorite={favorites.some(
                         (fav) => fav._id === movie._id,
@@ -1037,7 +1423,7 @@ function App() {
                           count: visibleCount + 10,
                         })
                       }
-                      className="px-8 py-3 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold rounded-2xl text-xs transition shadow-lg shadow-red-600/30 cursor-pointer transform hover:scale-105"
+                      className="px-8 py-3 bg-linear-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold rounded-2xl text-xs transition shadow-lg shadow-red-600/30 cursor-pointer transform hover:scale-105"
                     >
                       Xem thêm phim khác ({sortedMovies.length - visibleCount}{" "}
                       phim còn lại)
@@ -1050,15 +1436,190 @@ function App() {
         </>
       )}
 
+      {/* 🌟 MODAL CHỌN GÓI VIP & QUÉT MÃ QR THANH TOÁN */}
+      {isVipModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-fadeIn">
+          <div
+            className={`relative w-full max-w-xl rounded-3xl p-8 shadow-2xl border ${
+              darkMode
+                ? "bg-slate-900 border-slate-800 text-white"
+                : "bg-white border-gray-200 text-slate-900"
+            }`}
+          >
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-extrabold flex items-center gap-2 text-yellow-500">
+                👑{" "}
+                {isProcessingPayment === "qr"
+                  ? "Quét Mã QR Thanh Toán"
+                  : "Nâng Cấp Tài Khoản VIP"}
+              </h3>
+              <button
+                onClick={() => !isProcessingPayment && setIsVipModalOpen(false)}
+                className="text-slate-400 hover:text-white text-lg font-bold w-8 h-8 rounded-full bg-slate-800/50 flex items-center justify-center transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {isProcessingPayment === "loading" ? (
+              <div className="py-16 text-center space-y-4">
+                <div className="inline-block w-12 h-12 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-sm font-semibold text-yellow-400">
+                  Đang xử lý giao dịch và kích hoạt VIP...
+                </p>
+                <p className="text-xs text-slate-400">
+                  Vui lòng không tắt trình duyệt.
+                </p>
+              </div>
+            ) : isProcessingPayment === "qr" ? (
+              /* 💳 GIAO DIỆN QUÉT MÃ QR VIETQR CÁ NHÂN */
+              <div className="space-y-4 text-center">
+                <div className="p-3 bg-white rounded-2xl inline-block shadow-xl border-4 border-yellow-500">
+                  <img
+                    src={`https://img.vietqr.io/image/MB-4268611581729-compact2.png?amount=${
+                      selectedVipPackage === "1_month"
+                        ? "49000"
+                        : selectedVipPackage === "6_months"
+                          ? "249000"
+                          : "599000"
+                    }&addInfo=VIP%20${currentUser?.email || ""}`}
+                    alt="VietQR NGUYEN MINH TU"
+                    className="w-48 h-48 mx-auto object-contain rounded-lg"
+                  />
+                </div>
+
+                <div className="bg-slate-800/60 p-3 rounded-2xl border border-slate-700 text-left space-y-1 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Chủ tài khoản:</span>
+                    <span className="font-bold text-yellow-400 uppercase">
+                      NGUYEN MINH TU
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Số tài khoản:</span>
+                    <span className="font-bold text-white select-all">
+                      4268611581729
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Số tiền:</span>
+                    <span className="font-bold text-emerald-400">
+                      {selectedVipPackage === "1_month"
+                        ? "49.000đ"
+                        : selectedVipPackage === "6_months"
+                          ? "249.000đ"
+                          : "599.000đ"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Nội dung CK:</span>
+                    <span className="font-bold text-pink-400 select-all">
+                      VIP {currentUser?.email}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-1">
+                  <button
+                    onClick={() => setIsProcessingPayment(false)}
+                    className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold transition cursor-pointer"
+                  >
+                    Quay lại chọn gói
+                  </button>
+                  <button
+                    onClick={handleUpgradeVip}
+                    className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-emerald-600/30 cursor-pointer"
+                  >
+                    ✅ Tôi đã thanh toán xong
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <p className="text-xs text-slate-400">
+                  Chọn gói cước phù hợp để mở khóa toàn bộ kho phim 4K độc
+                  quyền, không quảng cáo và tốc độ cao.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {[
+                    {
+                      id: "1_month",
+                      name: "Gói 1 Tháng",
+                      price: "49.000đ",
+                      desc: "Trải nghiệm linh hoạt",
+                    },
+                    {
+                      id: "6_months",
+                      name: "Gói 6 Tháng",
+                      price: "249.000đ",
+                      desc: "Tiết kiệm 15%",
+                    },
+                    {
+                      id: "lifetime",
+                      name: "Trọn Đời (Diamond)",
+                      price: "599.000đ",
+                      desc: "Đặc quyền vĩnh viễn",
+                      popular: true,
+                    },
+                  ].map((pkg) => (
+                    <div
+                      key={pkg.id}
+                      onClick={() => setSelectedVipPackage(pkg.id)}
+                      className={`relative p-4 rounded-2xl border cursor-pointer transition-all flex flex-col justify-between ${
+                        selectedVipPackage === pkg.id
+                          ? "border-yellow-500 bg-yellow-500/10 ring-2 ring-yellow-500/50 shadow-lg"
+                          : darkMode
+                            ? "border-slate-800 bg-slate-800/40 hover:bg-slate-800"
+                            : "border-gray-200 bg-gray-50 hover:bg-gray-100"
+                      }`}
+                    >
+                      {pkg.popular && (
+                        <span className="absolute -top-2.5 right-3 bg-linear-to-r from-amber-500 to-yellow-500 text-slate-950 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase">
+                          Hot nhất
+                        </span>
+                      )}
+                      <div>
+                        <span className="text-xs font-bold block text-yellow-500">
+                          {pkg.name}
+                        </span>
+                        <span className="text-lg font-extrabold mt-1 block">
+                          {pkg.price}
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-slate-400 mt-2 block">
+                        {pkg.desc}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
+                  <div className="text-xs text-slate-400">
+                    Trạng thái hiện tại:{" "}
+                    <span className="text-emerald-400 font-semibold">
+                      {currentUser?.isVip ? "Đang là VIP" : "Thành viên thường"}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setIsProcessingPayment("qr")}
+                    className="px-8 py-3 bg-linear-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-slate-950 font-extrabold rounded-2xl text-xs transition shadow-lg shadow-yellow-500/20 cursor-pointer transform hover:scale-105 flex items-center gap-2"
+                  >
+                    💳 Thanh Toán Qua QR Code
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 📍 Modal Đăng ký / Đăng nhập */}
       <AuthModal
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
         onLoginSuccess={(user) => {
           setCurrentUser(user);
-          setProfileName(user.name || "");
-          setProfileAvatar(user.avatar || "");
-          setHasProfileAvatarError(false);
           showToast(`Chào mừng trở lại, ${user.name || "User"}!`, "success");
         }}
       />

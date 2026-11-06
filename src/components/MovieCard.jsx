@@ -1,4 +1,4 @@
-import { Play, Heart } from "lucide-react";
+import { Play, Heart, Crown } from "lucide-react";
 
 function MovieCard({ movie, onClick, isFavorite, onToggleFavorite }) {
   return (
@@ -6,12 +6,23 @@ function MovieCard({ movie, onClick, isFavorite, onToggleFavorite }) {
       onClick={onClick}
       className="group bg-slate-900 border border-slate-800 rounded-xl overflow-hidden cursor-pointer hover:border-slate-700 transition hover:-translate-y-1 shadow-md relative"
     >
-      <div className="relative aspect-[2/3] overflow-hidden">
+      <div className="relative aspect-2/3 overflow-hidden">
         <img
           src={movie.posterUrl}
           alt={movie.title}
           className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+          onError={(e) => {
+            e.target.onerror = null;
+            e.target.src = "https://via.placeholder.com/150x225?text=No+Image";
+          }}
         />
+
+        {/* 🌟 HIỂN THỊ HUY HIỆU VIP NẾU PHIM LÀ PHIM VIP */}
+        {movie.isVipOnly && (
+          <span className="absolute top-3 left-3 bg-linear-to-r from-amber-500 to-yellow-500 text-slate-950 font-extrabold text-[10px] px-2.5 py-1 rounded-lg shadow-md flex items-center gap-1 uppercase tracking-wider z-10 border border-yellow-300/40">
+            <Crown className="w-3 h-3 fill-current" /> VIP
+          </span>
+        )}
 
         {/* Nút Thả tim Yêu thích ở góc trên bên phải */}
         <button
@@ -44,9 +55,11 @@ function MovieCard({ movie, onClick, isFavorite, onToggleFavorite }) {
         <h3 className="font-semibold text-sm line-clamp-1 text-slate-200 group-hover:text-red-400 transition">
           {movie.title}
         </h3>
-        <p className="text-xs text-slate-400 mt-1 line-clamp-1">
-          {movie.description || "Phim mới cập nhật"}
-        </p>
+        <div className="flex items-center justify-between mt-1">
+          <p className="text-xs text-slate-400 line-clamp-1">
+            {movie.category || movie.description || "Phim mới cập nhật"}
+          </p>
+        </div>
       </div>
     </div>
   );

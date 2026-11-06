@@ -264,7 +264,7 @@ export default function Navbar({
                         : "U"}
                     </div>
                   )}
-                  <span className="text-xs font-semibold max-w-[90px] truncate hidden sm:inline-block">
+                  <span className="text-xs font-semibold max-w-22.5 truncate hidden sm:inline-block">
                     {currentUser?.name || "Tài khoản"}
                   </span>
                 </button>

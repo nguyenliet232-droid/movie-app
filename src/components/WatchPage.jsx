@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useRef } from "react";
 import {
   ArrowLeft,
   Star,
@@ -13,13 +13,15 @@ export default function WatchPage({
   movie,
   onBack,
   currentUser,
-  onAddToHistory,
   allMovies,
   onSelectMovie,
   darkMode,
 }) {
   // 🌟 State quản lý tập phim đang xem
   const [currentEpisodeIndex, setCurrentEpisodeIndex] = useState(0);
+
+  // 📍 Ref tham chiếu tới thẻ <video> để quản lý thời gian xem dở
+  const videoRef = useRef(null);
 
   const [reviews, setReviews] = useState(() => {
     return movie
@@ -41,15 +43,6 @@ export default function WatchPage({
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
 
-  useEffect(() => {
-    if (movie) {
-      if (onAddToHistory) onAddToHistory(movie);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      // Reset về tập 1 mỗi khi đổi phim khác
-      setCurrentEpisodeIndex(0);
-    }
-  }, [movie, onAddToHistory]);
-
   if (!movie) return null;
 
   // 🌟 Danh sách tập phim (nếu là phim bộ có mảng episodes)
@@ -58,6 +51,34 @@ export default function WatchPage({
     episodesList.length > 0
       ? episodesList[currentEpisodeIndex]?.videoUrl || movie.videoUrl
       : movie.videoUrl;
+
+  // 📍 Khóa lưu trữ vị trí xem trong localStorage
+  const storageKey = `watch_progress_${movie._id}_ep_${currentEpisodeIndex}`;
+
+  // 📍 Khi video load xong metadata, tự động tua đến thời gian đã xem dở lần trước
+  const handleLoadedMetadata = () => {
+    if (videoRef.current) {
+      const savedTime = localStorage.getItem(storageKey);
+      if (savedTime && !isNaN(savedTime)) {
+        videoRef.current.currentTime = parseFloat(savedTime);
+      }
+    }
+  };
+
+  // 📍 Khi người dùng đang xem, liên tục cập nhật thời gian vào localStorage (mỗi vài giây hoặc khi timeupdate)
+  const handleTimeUpdate = () => {
+    if (videoRef.current && videoRef.current.currentTime > 0) {
+      // Chỉ lưu nếu chưa xem hết phim (cách đoạn kết 2 giây)
+      if (
+        videoRef.current.duration &&
+        videoRef.current.currentTime < videoRef.current.duration - 2
+      ) {
+        localStorage.setItem(storageKey, videoRef.current.currentTime);
+      } else {
+        localStorage.removeItem(storageKey); // Nếu xem gần hết thì xóa mốc cũ
+      }
+    }
+  };
 
   // Lọc phim liên quan (cùng thể loại, khác ID phim hiện tại)
   const relatedMovies = allMovies
@@ -158,10 +179,13 @@ export default function WatchPage({
             ></iframe>
           ) : (
             <video
+              ref={videoRef}
               key={activeVideoUrl}
               src={activeVideoUrl}
               controls
               autoPlay
+              onLoadedMetadata={handleLoadedMetadata}
+              onTimeUpdate={handleTimeUpdate}
               className="w-full h-full object-cover"
             ></video>
           )}
@@ -207,7 +231,7 @@ export default function WatchPage({
                   />
                   <span>Tập {ep.episodeNumber || idx + 1}</span>
                   {ep.title && (
-                    <span className="opacity-70 font-normal truncate max-w-[100px]">
+                    <span className="opacity-70 font-normal truncate max-w-25">
                       ({ep.title})
                     </span>
                   )}
