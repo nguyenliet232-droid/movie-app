@@ -62,7 +62,7 @@ function UserMovies() {
               <div className="relative aspect-3/4 bg-slate-100 overflow-hidden">
                 {/* Hỗ trợ hiển thị cả poster từ TMDB lẫn poster thủ công */}
                 <img
-                  src={movie.poster || movie.posterUrl}
+                  src={movie.posterUrl || movie.poster || "https://via.placeholder.com/150x225?text=No+Image"}
                   alt={movie.title}
                   className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                   onError={(e) => {

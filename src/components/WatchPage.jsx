@@ -390,7 +390,11 @@ export default function WatchPage({
                     }`}
                   >
                     <img
-                      src={item.posterUrl}
+                      src={
+                        item.posterUrl ||
+                        item.poster ||
+                        "https://via.placeholder.com/150x225?text=No+Image"
+                      }
                       alt={item.title || item.name}
                       className="w-16 h-20 object-cover rounded-lg shadow"
                     />

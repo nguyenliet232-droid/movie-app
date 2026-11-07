@@ -154,7 +154,11 @@ export default function Navbar({
                       }`}
                     >
                       <img
-                        src={movie.posterUrl}
+                        src={
+                          movie.posterUrl ||
+                          movie.poster ||
+                          "https://via.placeholder.com/150x225?text=No+Image"
+                        }
                         alt={movie.title || movie.name}
                         className="w-10 h-14 object-cover rounded-lg shadow"
                       />

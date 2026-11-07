@@ -5,3 +5,5 @@ const PRODUCTION_API_URL =
 export const API_URL =
   import.meta.env.VITE_API_URL ||
   (import.meta.env.DEV ? DEVELOPMENT_API_URL : PRODUCTION_API_URL);
+
+export const TMDB_API_KEY = import.meta.env.VITE_TMDB_API_KEY || "";

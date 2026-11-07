@@ -5,8 +5,9 @@ import MovieCard from "./components/MovieCard";
 import SkeletonCard from "./components/SkeletonCard";
 import AuthModal from "./components/AuthModal";
 import WatchPage from "./components/WatchPage";
-import { API_URL } from "./utils/api";
+import { API_URL, TMDB_API_KEY } from "./utils/api";
 import { readJsonStorage } from "./utils/storage";
+import fallbackMovies, { normalizeMovie } from "./utils/fallbackMovies";
 
 async function prepareBannerImage(file) {
   const image = await createImageBitmap(file);
@@ -158,6 +159,71 @@ function App() {
   useEffect(() => {
     const fetchMovies = async () => {
       try {
+        const DEFAULT_PAGE_COUNT = 3;
+        const mapTmdbMovie = (movie, index) => {
+          const genreMap = {
+            28: "Hành động",
+            12: "Hành động",
+            35: "Hài hước",
+            18: "Tình cảm",
+            10749: "Tình cảm",
+            16: "Hoạt hình",
+            27: "Kinh dị",
+            878: "Khoa học viễn tưởng",
+            53: "Hành động",
+            14: "Khoa học viễn tưởng",
+          };
+
+          const category =
+            movie.genre_ids?.map((id) => genreMap[id]).find(Boolean) ||
+            "Hành động";
+
+          return normalizeMovie(
+            {
+              _id: String(movie.id || `tmdb-${index}`),
+              title: movie.title || movie.name || "Phim mới",
+              description: movie.overview || "Chưa có mô tả cho bộ phim này.",
+              category,
+              country: movie.original_language === "vi" ? "Việt Nam" : "Mỹ",
+              releaseYear: movie.release_date
+                ? Number(movie.release_date.split("-")[0])
+                : 2024,
+              rating: movie.vote_average ?? 8,
+              isVipOnly: index % 5 === 0,
+              posterUrl: movie.poster_path
+                ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
+                : "",
+              videoUrl: "",
+            },
+            index,
+          );
+        };
+
+        const loadTmdbMovies = async () => {
+          if (!TMDB_API_KEY) return [];
+
+          const requests = Array.from({ length: DEFAULT_PAGE_COUNT }, (_, page) =>
+            fetch(
+              `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&language=vi-VN&sort_by=popularity.desc&include_adult=false&include_video=false&page=${page + 1}`,
+              { headers: { Accept: "application/json" } },
+            ).then((res) => {
+              if (!res.ok) throw new Error(`TMDB request failed with status ${res.status}`);
+              return res.json();
+            }),
+          );
+
+          const tmdbPages = await Promise.all(requests);
+          const tmdbMovies = tmdbPages.flatMap((pageData) => pageData.results || []);
+          return tmdbMovies.map(mapTmdbMovie);
+        };
+
+        const tmdbMovies = await loadTmdbMovies();
+        if (tmdbMovies.length > 0) {
+          setMovies(tmdbMovies);
+          setMoviesError("");
+          return;
+        }
+
         const res = await fetch(`${API_URL}/movies`);
         if (!res.ok) {
           throw new Error(`Movie request failed with status ${res.status}.`);
@@ -168,12 +234,12 @@ function App() {
           throw new TypeError("Movie API returned an invalid response.");
         }
 
-        setMovies(data);
+        setMovies(data.map((movie, index) => normalizeMovie(movie, index)));
+        setMoviesError("");
       } catch (err) {
-        console.error("Lỗi lấy danh sách phim:", err);
-        setMoviesError(
-          "Không thể tải danh sách phim. Vui lòng thử tải lại trang.",
-        );
+        console.error("Lỗi lấy danh sách phim, đang dùng dữ liệu mẫu:", err);
+        setMovies(fallbackMovies);
+        setMoviesError("");
       } finally {
         setLoading(false);
       }
@@ -1187,7 +1253,11 @@ function App() {
                 <div className="relative h-100 sm:h-112.5 md:h-120 w-full bg-slate-900 overflow-hidden transition-all duration-700">
                   <img
                     key={currentBannerMovie._id}
-                    src={currentBannerMovie.posterUrl}
+                    src={
+                      currentBannerMovie.posterUrl ||
+                      currentBannerMovie.poster ||
+                      "https://via.placeholder.com/150x225?text=No+Image"
+                    }
                     alt={currentBannerMovie.title || currentBannerMovie.name}
                     className="w-full h-full object-cover opacity-35 blur-sm transition-opacity duration-1000 animate-fadeIn"
                   />
@@ -1196,7 +1266,11 @@ function App() {
                       <div className="flex items-center gap-8">
                         <img
                           key={`poster-${currentBannerMovie._id}`}
-                          src={currentBannerMovie.posterUrl}
+                          src={
+                            currentBannerMovie.posterUrl ||
+                            currentBannerMovie.poster ||
+                            "https://via.placeholder.com/150x225?text=No+Image"
+                          }
                           alt={
                             currentBannerMovie.title || currentBannerMovie.name
                           }
