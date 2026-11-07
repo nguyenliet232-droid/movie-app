@@ -6,9 +6,8 @@ const API_URL = "https://user-management-backend-7clg.onrender.com/api";
 function UserMovies() {
   const [movies, setMovies] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedMovie, setSelectedMovie] = useState(null); // Phim đang chọn để xem
+  const [selectedMovie, setSelectedMovie] = useState(null);
 
-  // Lấy danh sách phim từ Backend
   useEffect(() => {
     const fetchMovies = async () => {
       try {
@@ -24,13 +23,10 @@ function UserMovies() {
     fetchMovies();
   }, []);
 
-  // Xử lý khi người dùng bấm vào xem phim
   const handleWatchMovie = (movie) => {
-    // Lấy thông tin user hiện tại từ localStorage
     const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
     const isUserVip = currentUser?.isVip || currentUser?.role === "admin";
 
-    // Nếu phim yêu cầu VIP mà user chưa là VIP -> Chặn lại
     if (movie.isVipOnly && !isUserVip) {
       alert(
         "🔒 Bộ phim này chỉ dành riêng cho tài khoản VIP! Vui lòng nâng cấp tài khoản để xem.",
@@ -38,7 +34,6 @@ function UserMovies() {
       return;
     }
 
-    // Nếu hợp lệ -> Mở phim lên xem
     setSelectedMovie(movie);
   };
 
@@ -65,8 +60,9 @@ function UserMovies() {
               className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden cursor-pointer group hover:shadow-md transition relative"
             >
               <div className="relative aspect-3/4 bg-slate-100 overflow-hidden">
+                {/* Hỗ trợ hiển thị cả poster từ TMDB lẫn poster thủ công */}
                 <img
-                  src={movie.posterUrl}
+                  src={movie.poster || movie.posterUrl}
                   alt={movie.title}
                   className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                   onError={(e) => {
@@ -76,7 +72,6 @@ function UserMovies() {
                   }}
                 />
 
-                {/* 🌟 Hiển thị nhãn VIP nếu phim yêu cầu VIP */}
                 {movie.isVipOnly && (
                   <span className="absolute top-2 right-2 bg-amber-500 text-slate-950 font-bold text-[10px] px-2 py-1 rounded-md shadow flex items-center gap-1">
                     <Crown className="w-3 h-3" /> VIP
@@ -97,7 +92,7 @@ function UserMovies() {
         </div>
       )}
 
-      {/* 🌟 Modal xem phim (Phát Video) */}
+      {/* Modal Phát Video */}
       {selectedMovie && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
           <div className="bg-slate-900 rounded-xl max-w-3xl w-full p-4 text-white relative">
@@ -120,7 +115,9 @@ function UserMovies() {
                   allowFullScreen
                 />
               ) : (
-                <p className="text-slate-400">Đang cập nhật link video...</p>
+                <p className="text-slate-400">
+                  Đang cập nhật link video cho phim này...
+                </p>
               )}
             </div>
           </div>

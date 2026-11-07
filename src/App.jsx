@@ -8,6 +8,26 @@ import WatchPage from "./components/WatchPage";
 import { API_URL } from "./utils/api";
 import { readJsonStorage } from "./utils/storage";
 
+async function prepareBannerImage(file) {
+  const image = await createImageBitmap(file);
+  const scale = Math.min(1, 1600 / Math.max(image.width, image.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(image.width * scale);
+  canvas.height = Math.round(image.height * scale);
+
+  try {
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("Could not create a canvas context.");
+    }
+
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.82);
+  } finally {
+    image.close();
+  }
+}
+
 function App() {
   const [movies, setMovies] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -513,19 +533,26 @@ function App() {
                   id="bannerBgInput"
                   accept="image/*"
                   className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files[0];
-                    if (file) {
-                      const reader = new FileReader();
-                      reader.onloadend = async () => {
-                        await handleUpdateProfileDirectly(
-                          currentUser?.name,
-                          currentUser?.avatar,
-                          currentUser?.bio,
-                          reader.result,
-                        );
-                      };
-                      reader.readAsDataURL(file);
+                  onChange={async (e) => {
+                    const input = e.currentTarget;
+                    const file = input.files?.[0];
+                    input.value = "";
+                    if (!file) return;
+
+                    try {
+                      const bannerUrl = await prepareBannerImage(file);
+                      await handleUpdateProfileDirectly(
+                        currentUser?.name,
+                        currentUser?.avatar,
+                        currentUser?.bio,
+                        bannerUrl,
+                      );
+                    } catch (error) {
+                      console.error("Lỗi xử lý ảnh bìa:", error);
+                      showToast(
+                        "Không thể xử lý ảnh bìa. Vui lòng chọn ảnh khác!",
+                        "error",
+                      );
                     }
                   }}
                 />
