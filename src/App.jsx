@@ -9,6 +9,22 @@ import { API_URL, TMDB_API_KEY } from "./utils/api";
 import { readJsonStorage } from "./utils/storage";
 import fallbackMovies, { normalizeMovie } from "./utils/fallbackMovies";
 
+const FAVORITES_STORAGE_KEY = "movie_favorites";
+const REMOVED_FAVORITES_STORAGE_KEY = "movie_removed_favorites";
+
+const isFavoriteList = (value) =>
+  Array.isArray(value) &&
+  value.every(
+    (movie) =>
+      movie &&
+      typeof movie === "object" &&
+      !Array.isArray(movie) &&
+      typeof movie._id === "string",
+  );
+
+const isFavoriteIdList = (value) =>
+  Array.isArray(value) && value.every((id) => typeof id === "string");
+
 async function prepareBannerImage(file) {
   const image = await createImageBitmap(file);
   const scale = Math.min(1, 1600 / Math.max(image.width, image.height));
@@ -81,13 +97,22 @@ function App() {
   }, []);
 
   // 🌟 Quản lý danh sách Yêu thích & Lịch sử
-  const [favorites, setFavorites] = useState([]);
+  const [favorites, setFavorites] = useState(() =>
+    readJsonStorage(FAVORITES_STORAGE_KEY, [], isFavoriteList),
+  );
   const [watchHistory, setWatchHistory] = useState([]);
+
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favorites));
+    }
+  }, [currentUser, favorites]);
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem("movie_user");
     localStorage.removeItem("movie_token");
-    localStorage.removeItem("movie_favorites");
+    localStorage.removeItem(FAVORITES_STORAGE_KEY);
+    localStorage.removeItem(REMOVED_FAVORITES_STORAGE_KEY);
     localStorage.removeItem("movie_watch_history");
 
     setCurrentUser(null);
@@ -202,18 +227,25 @@ function App() {
         const loadTmdbMovies = async () => {
           if (!TMDB_API_KEY) return [];
 
-          const requests = Array.from({ length: DEFAULT_PAGE_COUNT }, (_, page) =>
-            fetch(
-              `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&language=vi-VN&sort_by=popularity.desc&include_adult=false&include_video=false&page=${page + 1}`,
-              { headers: { Accept: "application/json" } },
-            ).then((res) => {
-              if (!res.ok) throw new Error(`TMDB request failed with status ${res.status}`);
-              return res.json();
-            }),
+          const requests = Array.from(
+            { length: DEFAULT_PAGE_COUNT },
+            (_, page) =>
+              fetch(
+                `https://api.themoviedb.org/3/discover/movie?api_key=${TMDB_API_KEY}&language=vi-VN&sort_by=popularity.desc&include_adult=false&include_video=false&page=${page + 1}`,
+                { headers: { Accept: "application/json" } },
+              ).then((res) => {
+                if (!res.ok)
+                  throw new Error(
+                    `TMDB request failed with status ${res.status}`,
+                  );
+                return res.json();
+              }),
           );
 
           const tmdbPages = await Promise.all(requests);
-          const tmdbMovies = tmdbPages.flatMap((pageData) => pageData.results || []);
+          const tmdbMovies = tmdbPages.flatMap(
+            (pageData) => pageData.results || [],
+          );
           return tmdbMovies.map(mapTmdbMovie);
         };
 
@@ -284,7 +316,45 @@ function App() {
             throw new TypeError("User sync API returned invalid data.");
           }
           if (isCurrent) {
-            setFavorites(data.favorites);
+            const serverFavorites = data.favorites.filter(
+              (movie) =>
+                movie &&
+                typeof movie === "object" &&
+                !Array.isArray(movie) &&
+                typeof movie._id === "string",
+            );
+            const serverFavoriteIds = new Set(
+              serverFavorites.map((movie) => movie._id),
+            );
+            const removedFavoriteIds = readJsonStorage(
+              REMOVED_FAVORITES_STORAGE_KEY,
+              [],
+              isFavoriteIdList,
+            ).filter((id) => serverFavoriteIds.has(id));
+            const removedFavoriteIdSet = new Set(removedFavoriteIds);
+            const mergedFavorites = new Map(
+              serverFavorites.map((movie) => [movie._id, movie]),
+            );
+
+            for (const movie of readJsonStorage(
+              FAVORITES_STORAGE_KEY,
+              [],
+              isFavoriteList,
+            )) {
+              if (!mergedFavorites.has(movie._id)) {
+                mergedFavorites.set(movie._id, movie);
+              }
+            }
+
+            localStorage.setItem(
+              REMOVED_FAVORITES_STORAGE_KEY,
+              JSON.stringify(removedFavoriteIds),
+            );
+            setFavorites(
+              Array.from(mergedFavorites.values()).filter(
+                (movie) => !removedFavoriteIdSet.has(movie._id),
+              ),
+            );
             setWatchHistory(data.watchHistory);
           }
         } else {
@@ -304,18 +374,46 @@ function App() {
     };
   }, [currentUser, handleLogout, showToast]);
 
-  const handleToggleFavorite = async (movie) => {
+  const handleToggleFavorite = async (movieOrId) => {
     if (!currentUser) {
       setIsAuthOpen(true);
       showToast("Vui lòng đăng nhập để lưu phim yêu thích!", "error");
       return;
     }
 
-    const exists = favorites.some((item) => item._id === movie._id);
+    // Xử lý linh hoạt: dù truyền vào object phim hay chỉ truyền vào chuỗi ID (_id)
+    const movieId = typeof movieOrId === "object" ? movieOrId?._id : movieOrId;
+
+    if (!movieId) {
+      console.error("❌ Lỗi: Không tìm thấy ID phim hợp lệ!", movieOrId);
+      return;
+    }
+
+    // Tìm xem phim này đã có trong danh sách favorites chưa (hỗ trợ cả mảng chứa object hoặc mảng chứa ID)
+    const exists = favorites.some((item) =>
+      typeof item === "object" ? item._id === movieId : item === movieId,
+    );
+
+    // Cập nhật state giao diện ngay lập tức (Optimistic Update)
+    // Nếu truyền vào object phim thì dùng object, nếu chỉ truyền ID thì tạm thời dùng ID đó
     const updatedFavs = exists
-      ? favorites.filter((item) => item._id !== movie._id)
-      : [...favorites, movie];
+      ? favorites.filter((item) =>
+          typeof item === "object" ? item._id !== movieId : item !== movieId,
+        )
+      : [...favorites, movieOrId];
+
     setFavorites(updatedFavs);
+
+    const removedFavoriteIds = readJsonStorage(
+      REMOVED_FAVORITES_STORAGE_KEY,
+      [],
+      isFavoriteIdList,
+    ).filter((id) => id !== movieId);
+
+    localStorage.setItem(
+      REMOVED_FAVORITES_STORAGE_KEY,
+      JSON.stringify(removedFavoriteIds),
+    );
 
     try {
       const token = localStorage.getItem("movie_token");
@@ -325,7 +423,7 @@ function App() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ movieId: movie._id }),
+        body: JSON.stringify({ movieId }), // Gửi chính xác chuỗi movieId lên server
       });
 
       if (res.status === 401) {
@@ -339,7 +437,17 @@ function App() {
       }
 
       if (!res.ok) {
-        throw new Error(`Favorite request failed with status ${res.status}.`);
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(
+          errData.message ||
+            `Favorite request failed with status ${res.status}.`,
+        );
+      }
+
+      const responseData = await res.json();
+      // Nếu server trả về mảng favorites chuẩn, cập nhật lại state từ server để đồng bộ tuyệt đối
+      if (responseData.favorites) {
+        setFavorites(responseData.favorites);
       }
 
       showToast(
@@ -350,15 +458,16 @@ function App() {
       );
     } catch (err) {
       console.error("Lỗi lưu yêu thích lên server:", err);
-      setFavorites((currentFavorites) =>
-        exists
-          ? currentFavorites.some((item) => item._id === movie._id)
-            ? currentFavorites
-            : [...currentFavorites, movie]
-          : currentFavorites.filter((item) => item._id !== movie._id),
-      );
+      if (exists) {
+        localStorage.setItem(
+          REMOVED_FAVORITES_STORAGE_KEY,
+          JSON.stringify([...removedFavoriteIds, movieId]),
+        );
+      }
       showToast(
-        "Không thể cập nhật danh sách yêu thích. Vui lòng thử lại.",
+        exists
+          ? "Đã xóa trên thiết bị này; chưa thể đồng bộ với máy chủ."
+          : "Đã lưu trên thiết bị này; chưa thể đồng bộ với máy chủ.",
         "error",
       );
     }
