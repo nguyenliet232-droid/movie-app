@@ -374,6 +374,7 @@ function App() {
     };
   }, [currentUser, handleLogout, showToast]);
 
+  // 🌟 Hàm xử lý yêu thích (Đã tối ưu chuẩn xác truyền movieId dạng string)
   const handleToggleFavorite = async (movieOrId) => {
     if (!currentUser) {
       setIsAuthOpen(true);
@@ -381,7 +382,6 @@ function App() {
       return;
     }
 
-    // Xử lý linh hoạt: dù truyền vào object phim hay chỉ truyền vào chuỗi ID (_id)
     const movieId = typeof movieOrId === "object" ? movieOrId?._id : movieOrId;
 
     if (!movieId) {
@@ -389,13 +389,10 @@ function App() {
       return;
     }
 
-    // Tìm xem phim này đã có trong danh sách favorites chưa (hỗ trợ cả mảng chứa object hoặc mảng chứa ID)
     const exists = favorites.some((item) =>
       typeof item === "object" ? item._id === movieId : item === movieId,
     );
 
-    // Cập nhật state giao diện ngay lập tức (Optimistic Update)
-    // Nếu truyền vào object phim thì dùng object, nếu chỉ truyền ID thì tạm thời dùng ID đó
     const updatedFavs = exists
       ? favorites.filter((item) =>
           typeof item === "object" ? item._id !== movieId : item !== movieId,
@@ -423,7 +420,7 @@ function App() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ movieId }), // Gửi chính xác chuỗi movieId lên server
+        body: JSON.stringify({ movieId }),
       });
 
       if (res.status === 401) {
@@ -445,7 +442,6 @@ function App() {
       }
 
       const responseData = await res.json();
-      // Nếu server trả về mảng favorites chuẩn, cập nhật lại state từ server để đồng bộ tuyệt đối
       if (responseData.favorites) {
         setFavorites(responseData.favorites);
       }
@@ -473,14 +469,26 @@ function App() {
     }
   };
 
+  // 🌟 Hàm xử lý lịch sử xem (Đã tối ưu chuẩn xác truyền movieId dạng string)
   const handleAddToHistory = useCallback(
-    async (movie) => {
+    async (movieOrId) => {
       if (!currentUser) return;
 
-      setWatchHistory((prevHistory) => {
-        const filtered = prevHistory.filter((item) => item._id !== movie._id);
-        return [movie, ...filtered];
-      });
+      const movieId =
+        typeof movieOrId === "object" ? movieOrId?._id : movieOrId;
+      const movieObj =
+        typeof movieOrId === "object"
+          ? movieOrId
+          : movies.find((m) => m._id === movieId);
+
+      if (!movieId) return;
+
+      if (movieObj) {
+        setWatchHistory((prevHistory) => {
+          const filtered = prevHistory.filter((item) => item._id !== movieId);
+          return [movieObj, ...filtered];
+        });
+      }
 
       try {
         const token = localStorage.getItem("movie_token");
@@ -490,7 +498,7 @@ function App() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ movieId: movie._id }),
+          body: JSON.stringify({ movieId }),
         });
 
         if (res.status === 401) {
@@ -504,16 +512,22 @@ function App() {
         }
 
         if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
           throw new Error(
-            `Watch history request failed with status ${res.status}.`,
+            errData.message ||
+              `Watch history request failed with status ${res.status}.`,
           );
+        }
+
+        const responseData = await res.json();
+        if (responseData.watchHistory) {
+          setWatchHistory(responseData.watchHistory);
         }
       } catch (err) {
         console.error("Lỗi lưu lịch sử lên server:", err);
-        showToast("Không thể đồng bộ lịch sử xem với máy chủ.", "error");
       }
     },
-    [currentUser, handleLogout, showToast],
+    [currentUser, handleLogout, showToast, movies],
   );
 
   const handleUpdateProfileDirectly = async (
@@ -562,13 +576,12 @@ function App() {
     }
   };
 
-  // 🌟 Hàm xử lý gửi yêu cầu nâng cấp VIP chờ Admin duyệt
   const handleUpgradeVip = async () => {
     setIsProcessingPayment("loading");
     try {
       const token = localStorage.getItem("movie_token");
       const res = await fetch(`${API_URL}/users/request-vip`, {
-        method: "POST", // 🌟 Sửa từ PUT thành POST
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
@@ -592,10 +605,9 @@ function App() {
   };
 
   const handleOpenWatchPage = (movie) => {
-    // 🌟 Kiểm tra nếu phim yêu cầu VIP nhưng user chưa mua VIP
     if (movie.isVipOnly && !currentUser?.isVip) {
       showToast("⭐ Bộ phim này chỉ dành riêng cho tài khoản VIP!", "error");
-      setIsVipModalOpen(true); // Tự động bật Modal chọn gói VIP lên
+      setIsVipModalOpen(true);
       return;
     }
 
@@ -803,11 +815,10 @@ function App() {
                       placeholder="Nhập tên của bạn..."
                     />
 
-                    {/* Huy hiệu hiển thị theo trạng thái VIP thực tế */}
                     <span
                       className={`font-extrabold text-[10px] px-2.5 py-1 rounded-full shadow-md uppercase tracking-wider flex items-center gap-1 ${
                         currentUser?.isVip
-                          ? "bg-linear-to-r from-amber-500 to-yellow-500 text-slate-950"
+                          ? "bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950"
                           : "bg-slate-800 text-slate-300 border border-slate-700"
                       }`}
                     >
@@ -854,12 +865,12 @@ function App() {
             </div>
 
             <div className="p-8 space-y-8 mt-2">
-              {/* 🌟 THẺ THÀNH VIÊN VIP (TỰ ĐỘNG THAY ĐỔI THEO TRẠNG THÁI TÀI KHOẢN) */}
+              {/* 🌟 THẺ THÀNH VIÊN VIP */}
               <div
                 className={`relative p-6 rounded-3xl text-white shadow-2xl overflow-hidden border ${
                   currentUser?.isVip
-                    ? "bg-linear-to-r from-amber-600 via-yellow-600 to-amber-700 border-yellow-400/30"
-                    : "bg-linear-to-r from-slate-800 via-slate-900 to-slate-950 border-slate-700"
+                    ? "bg-gradient-to-r from-amber-600 via-yellow-600 to-amber-700 border-yellow-400/30"
+                    : "bg-gradient-to-r from-slate-800 via-slate-900 to-slate-950 border-slate-700"
                 }`}
               >
                 <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
@@ -900,7 +911,7 @@ function App() {
                     className={`px-6 py-3 font-bold rounded-2xl text-xs transition shadow-xl cursor-pointer transform hover:scale-105 whitespace-nowrap ${
                       currentUser?.isVip
                         ? "bg-slate-950 hover:bg-slate-900 text-yellow-400 border border-yellow-400/40"
-                        : "bg-linear-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white shadow-red-600/30"
+                        : "bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white shadow-red-600/30"
                     }`}
                   >
                     {currentUser?.isVip
@@ -1370,7 +1381,7 @@ function App() {
                     alt={currentBannerMovie.title || currentBannerMovie.name}
                     className="w-full h-full object-cover opacity-35 blur-sm transition-opacity duration-1000 animate-fadeIn"
                   />
-                  <div className="absolute inset-0 bg-linear-to-t from-slate-950 via-slate-950/60 to-transparent flex items-center">
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-transparent flex items-center">
                     <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center gap-8 w-full justify-between">
                       <div className="flex items-center gap-8">
                         <img
@@ -1440,7 +1451,7 @@ function App() {
                   </div>
                 </div>
               );
-            })()}
+            })}
 
           {/* 📍 THANH LỌC NÂNG CAO */}
           {activeTab === "home" && (
@@ -1462,7 +1473,7 @@ function App() {
                     }}
                     className={`px-4 py-2 rounded-full text-xs font-semibold transition-all cursor-pointer transform hover:scale-105 ${
                       selectedCategory === cat && activeTab === "home"
-                        ? "bg-linear-to-r from-red-600 to-rose-600 text-white shadow-lg shadow-red-600/30"
+                        ? "bg-gradient-to-r from-red-600 to-rose-600 text-white shadow-lg shadow-red-600/30"
                         : darkMode
                           ? "bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white border border-slate-800"
                           : "bg-white text-slate-600 hover:bg-gray-100 border border-gray-200 shadow-sm"
@@ -1614,7 +1625,6 @@ function App() {
                       key={movie._id}
                       movie={movie}
                       currentUser={currentUser}
-                      a
                       onClick={() => handleOpenWatchPage(movie)}
                       isFavorite={favorites.some(
                         (fav) => fav._id === movie._id,
@@ -1633,7 +1643,7 @@ function App() {
                           count: visibleCount + 10,
                         })
                       }
-                      className="px-8 py-3 bg-linear-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold rounded-2xl text-xs transition shadow-lg shadow-red-600/30 cursor-pointer transform hover:scale-105"
+                      className="px-8 py-3 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-semibold rounded-2xl text-xs transition shadow-lg shadow-red-600/30 cursor-pointer transform hover:scale-105"
                     >
                       Xem thêm phim khác ({sortedMovies.length - visibleCount}{" "}
                       phim còn lại)
@@ -1785,7 +1795,7 @@ function App() {
                       }`}
                     >
                       {pkg.popular && (
-                        <span className="absolute -top-2.5 right-3 bg-linear-to-r from-amber-500 to-yellow-500 text-slate-950 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase">
+                        <span className="absolute -top-2.5 right-3 bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase">
                           Hot nhất
                         </span>
                       )}
@@ -1813,7 +1823,7 @@ function App() {
                   </div>
                   <button
                     onClick={() => setIsProcessingPayment("qr")}
-                    className="px-8 py-3 bg-linear-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-slate-950 font-extrabold rounded-2xl text-xs transition shadow-lg shadow-yellow-500/20 cursor-pointer transform hover:scale-105 flex items-center gap-2"
+                    className="px-8 py-3 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-slate-950 font-extrabold rounded-2xl text-xs transition shadow-lg shadow-yellow-500/20 cursor-pointer transform hover:scale-105 flex items-center gap-2"
                   >
                     💳 Thanh Toán Qua QR Code
                   </button>
