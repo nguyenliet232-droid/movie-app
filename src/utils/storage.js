@@ -14,3 +14,11 @@ export function readJsonStorage(key, fallback, isValid = () => true) {
     return fallback;
   }
 }
+
+export function writeJsonStorage(key, value) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    console.error(`Failed to write local storage key "${key}":`, error);
+  }
+}

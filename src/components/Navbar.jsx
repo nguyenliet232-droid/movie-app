@@ -1,302 +1,358 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import {
+  Bell,
+  ChevronDown,
+  Clock3,
+  Download,
   Film,
-  Search,
-  X,
-  LogIn,
-  LogOut,
   Heart,
-  History,
-  Sun,
-  Moon,
-  Play,
+  LogOut,
+  Search,
+  Smartphone,
+  Ticket,
+  UserRound,
+  X,
 } from "lucide-react";
 
+const mainLinks = [
+  { label: "Trang chủ", href: "#top", view: "home" },
+  { label: "Phim mới", href: "#newest", view: "home" },
+  { label: "Phim lẻ", href: "#popular", view: "home" },
+  { label: "Phim bộ", href: "#genres", view: "home" },
+  { label: "TV Show", href: "#movie-rows", view: "home" },
+  { label: "Thiếu nhi", href: "#kids", category: "Hoạt hình" },
+];
+
 export default function Navbar({
+  categories,
   searchTerm,
-  setSearchTerm,
+  onSearchChange,
+  selectedCategory,
+  onSelectCategory,
+  countries,
+  years,
+  selectedCountry,
+  onSelectCountry,
+  selectedYear,
+  onSelectYear,
+  sortBy,
+  onSelectSort,
+  activeView,
+  onSelectView,
   currentUser,
-  onOpenAuth,
+  onRequestLogin,
   onLogout,
+  onRequestVip,
+  recentMovies,
   favoriteCount,
-  historyCount,
-  activeTab,
-  setActiveTab,
-  darkMode,
-  setDarkMode,
-  movies = [],
-  onSelectMovie,
 }) {
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const searchRef = useRef(null);
+  const [openPanel, setOpenPanel] = useState("");
+  const [code, setCode] = useState("");
+  const [codeMessage, setCodeMessage] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
 
-  // Lọc danh sách phim gợi ý (không phân biệt chữ hoa/thường, kiểm tra cả title và name)
-  const searchSuggestions =
-    searchTerm.trim() === ""
-      ? []
-      : movies
-          .filter((m) => {
-            const keyword = searchTerm.toLowerCase();
-            const movieTitle = (m.title || m.name || "").toLowerCase();
-            return movieTitle.includes(keyword);
-          })
-          .slice(0, 5);
-
-  // Đóng ô tìm kiếm khi click ra ngoài
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (searchRef.current && !searchRef.current.contains(event.target)) {
-        if (!searchTerm) {
-          setIsSearchOpen(false);
-        }
-      }
+  const selectHome = (link) => {
+    onSelectView("home");
+    onSearchChange("");
+    onSelectCategory(link.category || "Tất cả");
+    setOpenPanel("");
+    if (link.label === "Trang chủ") {
+      document.getElementById("top")?.scrollIntoView({ behavior: "smooth" });
+    } else {
+      document.querySelector(link.href)?.scrollIntoView({ behavior: "smooth" });
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [searchTerm]);
+  };
+
+  const submitCode = (event) => {
+    event.preventDefault();
+    setCodeMessage(
+      code.trim()
+        ? "Máy chủ Movie App chưa hỗ trợ kiểm tra mã. Mã chưa được áp dụng."
+        : "Vui lòng nhập mã trước khi tiếp tục.",
+    );
+  };
 
   return (
-    <nav
-      className={`${
-        darkMode
-          ? "bg-slate-900/90 border-slate-800 text-white"
-          : "bg-white/90 border-slate-200 text-slate-900"
-      } backdrop-blur-md border-b sticky top-0 z-50 px-6 py-4 transition-colors`}
-    >
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-        {/* Logo */}
-        <div
-          onClick={() => setActiveTab("home")}
-          className="flex items-center gap-2 text-red-500 font-bold text-2xl tracking-wider cursor-pointer"
+    <header id="top" className="movie-navbar">
+      <div className="movie-navbar__main">
+        <a
+          className="movie-brand"
+          href="#top"
+          aria-label="Movie App - Trang chủ"
+          onClick={() => selectHome(mainLinks[0])}
         >
-          <Film className="w-8 h-8" />
-          <span>CINEMA-STREAM</span>
-        </div>
+          <Film size={28} strokeWidth={2.2} />
+          <span>
+            MOVIE<span>APP</span>
+          </span>
+        </a>
 
-        {/* Thanh Tìm Kiếm Mở Rộng + Gợi Ý Nhanh */}
-        <div ref={searchRef} className="relative">
-          <div
-            onClick={() => {
-              if (!isSearchOpen) setIsSearchOpen(true);
-            }}
-            className={`flex items-center transition-all duration-300 rounded-full border cursor-pointer ${
-              isSearchOpen || searchTerm
-                ? "w-64 sm:w-80 px-3.5 py-2 bg-slate-900/95 border-red-500 shadow-xl shadow-red-600/20"
-                : "w-11 h-11 justify-center " +
-                  (darkMode
-                    ? "bg-slate-800 border-slate-700 hover:bg-slate-700"
-                    : "bg-slate-100 border-slate-300 hover:bg-slate-200")
-            }`}
-          >
-            <Search
-              className={`w-5 h-5 transition-colors shrink-0 ${
-                isSearchOpen || searchTerm
-                  ? "text-red-500 mr-2"
-                  : darkMode
-                    ? "text-slate-400"
-                    : "text-slate-500"
-              }`}
-            />
-
-            {(isSearchOpen || searchTerm) && (
-              <input
-                type="text"
-                placeholder="Tìm kiếm phim, diễn viên..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                autoFocus
-                className="w-full bg-transparent text-xs text-white focus:outline-none placeholder-slate-400"
-              />
-            )}
-
-            {searchTerm && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSearchTerm("");
-                }}
-                className="text-slate-400 hover:text-white ml-1.5 cursor-pointer shrink-0"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-
-          {/* Dropdown gợi ý phim */}
-          {searchTerm && isSearchOpen && (
-            <div
-              className={`absolute left-0 right-0 mt-2 rounded-2xl border shadow-2xl overflow-hidden z-50 ${
-                darkMode
-                  ? "bg-slate-900 border-slate-800 text-white"
-                  : "bg-white border-gray-200 text-slate-900"
-              }`}
+        <nav className="movie-navbar__links" aria-label="Điều hướng chính">
+          {mainLinks.map((link, index) => (
+            <a
+              key={link.label}
+              href={link.href}
+              className={index === 0 && activeView === "home" ? "is-active" : ""}
+              onClick={(event) => {
+                event.preventDefault();
+                selectHome(link);
+              }}
             >
-              <div className="p-2.5 border-b border-slate-800/60 text-[11px] font-semibold text-slate-400 flex justify-between items-center">
-                <span>GỢI Ý TỪ KHÓA & PHIM</span>
-                <span>{searchSuggestions.length} kết quả</span>
+              {link.label}
+            </a>
+          ))}
+        </nav>
+
+        <div className="movie-navbar__utility">
+          <button
+            type="button"
+            className="movie-navbar__vip"
+            onClick={() => {
+              setOpenPanel("");
+              onRequestVip();
+            }}
+          >
+            <span className="movie-navbar__vip-full">ĐẶC QUYỀN VIP</span>
+            <span className="movie-navbar__vip-short">VIP</span>
+          </button>
+          <div className="movie-navbar__panel-anchor">
+            <button
+              type="button"
+              className="movie-navbar__voucher-trigger"
+              onClick={() => setOpenPanel(openPanel === "voucher" ? "" : "voucher")}
+            >
+              Nhập mã <span className="movie-navbar__voucher-full">Movie App</span>
+            </button>
+            {openPanel === "voucher" && (
+              <div className="movie-navbar__popover movie-navbar__popover--voucher">
+                <div className="movie-navbar__popover-heading">
+                  <strong>Nhập mã ưu đãi</strong>
+                  <button type="button" onClick={() => setOpenPanel("")} aria-label="Đóng">
+                    <X size={16} />
+                  </button>
+                </div>
+                <form onSubmit={submitCode}>
+                  <label htmlFor="voucher-code">Mã ưu đãi</label>
+                  <input
+                    id="voucher-code"
+                    value={code}
+                    onChange={(event) => {
+                      setCode(event.target.value);
+                      setCodeMessage("");
+                    }}
+                    placeholder="Nhập mã của bạn"
+                  />
+                  <button type="submit">Kiểm tra mã</button>
+                </form>
+                {codeMessage && <p role="status">{codeMessage}</p>}
               </div>
-
-              {searchSuggestions.length === 0 ? (
-                <div className="p-4 text-center text-xs text-slate-400">
-                  Không tìm thấy bộ phim phù hợp với "{searchTerm}"
+            )}
+          </div>
+          <label
+            className={
+              searchOpen || searchTerm
+                ? "movie-search is-expanded"
+                : "movie-search"
+            }
+          >
+            <button
+              type="button"
+              className="movie-search__toggle"
+              onClick={() => setSearchOpen((open) => !open)}
+              aria-label={searchOpen ? "Đóng tìm kiếm" : "Tìm kiếm nội dung"}
+            >
+              <Search size={20} aria-hidden="true" />
+            </button>
+            <input
+              type="search"
+              value={searchTerm}
+              onChange={(event) => onSearchChange(event.target.value)}
+              placeholder="Tìm phim..."
+              aria-label="Tìm phim"
+            />
+          </label>
+          <div className="movie-navbar__panel-anchor movie-navbar__desktop-only">
+            <button
+              type="button"
+              className="movie-navbar__icon-button"
+              onClick={() => setOpenPanel(openPanel === "app" ? "" : "app")}
+              aria-label="Tải ứng dụng"
+              aria-expanded={openPanel === "app"}
+            >
+              <Download size={19} />
+            </button>
+            {openPanel === "app" && (
+              <div className="movie-navbar__popover movie-navbar__popover--app">
+                <Smartphone size={22} />
+                <strong>Movie App trên điện thoại</strong>
+                <p>Mở trang này bằng trình duyệt di động rồi chọn “Thêm vào màn hình chính”.</p>
+              </div>
+            )}
+          </div>
+          <div className="movie-navbar__panel-anchor">
+            <button
+              type="button"
+              className="movie-navbar__icon-button"
+              onClick={() => setOpenPanel(openPanel === "notifications" ? "" : "notifications")}
+              aria-label="Thông báo"
+              aria-expanded={openPanel === "notifications"}
+            >
+              <Bell size={19} />
+              {recentMovies.length > 0 && <span className="movie-navbar__notification-dot" />}
+            </button>
+            {openPanel === "notifications" && (
+              <div className="movie-navbar__popover movie-navbar__popover--notifications">
+                <div className="movie-navbar__popover-heading">
+                  <strong>Thông báo</strong>
+                  <button type="button" onClick={() => setOpenPanel("")} aria-label="Đóng">
+                    <X size={16} />
+                  </button>
                 </div>
-              ) : (
-                <div className="divide-y divide-slate-800/40">
-                  {searchSuggestions.map((movie) => (
-                    <div
-                      key={movie._id}
-                      onClick={() => {
-                        if (onSelectMovie) onSelectMovie(movie);
-                        setIsSearchOpen(false);
-                      }}
-                      className={`flex items-center gap-3 p-2.5 transition cursor-pointer ${
-                        darkMode ? "hover:bg-slate-800/80" : "hover:bg-gray-100"
-                      }`}
-                    >
-                      <img
-                        src={
-                          movie.posterUrl ||
-                          movie.poster ||
-                          "https://via.placeholder.com/150x225?text=No+Image"
-                        }
-                        alt={movie.title || movie.name}
-                        className="w-10 h-14 object-cover rounded-lg shadow"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-xs font-bold truncate">
-                          {movie.title || movie.name}
-                        </h4>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-[10px] bg-red-600/20 text-red-400 px-2 py-0.5 rounded font-medium">
-                            {movie.category || "Phim"}
-                          </span>
-                          <span className="text-[10px] text-slate-400">
-                            {movie.releaseYear || 2024}
-                          </span>
-                        </div>
-                      </div>
-                      <Play className="w-4 h-4 text-red-500 fill-red-500 shrink-0 opacity-80" />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Khu vực bên phải */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            className={`p-2 rounded-full transition cursor-pointer ${
-              darkMode
-                ? "bg-slate-800 text-amber-400 hover:bg-slate-700"
-                : "bg-slate-100 text-amber-500 hover:bg-slate-200"
-            }`}
-            title="Chuyển chế độ sáng/tối"
-          >
-            {darkMode ? (
-              <Sun className="w-5 h-5" />
-            ) : (
-              <Moon className="w-5 h-5" />
+                {recentMovies.length > 0 ? (
+                  recentMovies.slice(0, 3).map((movie) => (
+                    <p key={movie._id}>
+                      Đã thêm <strong>{movie.title}</strong> vào mục Đang xem.
+                    </p>
+                  ))
+                ) : (
+                  <p>Chưa có thông báo mới.</p>
+                )}
+              </div>
             )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab("watchlist")}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold transition cursor-pointer ${
-              activeTab === "watchlist"
-                ? "bg-red-600 text-white shadow-lg shadow-red-600/30"
-                : darkMode
-                  ? "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700"
-                  : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300"
-            }`}
-          >
-            <Heart className="w-4 h-4 text-red-500 fill-red-500" />
-            <span className="hidden sm:inline">Yêu thích</span>
-            {favoriteCount > 0 && (
-              <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                {favoriteCount}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab("history")}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-semibold transition cursor-pointer ${
-              activeTab === "history"
-                ? "bg-red-600 text-white shadow-lg shadow-red-600/30"
-                : darkMode
-                  ? "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700"
-                  : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300"
-            }`}
-          >
-            <History className="w-4 h-4 text-amber-400" />
-            <span className="hidden sm:inline">Lịch sử</span>
-            {historyCount > 0 && (
-              <span className="bg-amber-500 text-slate-950 text-[10px] px-1.5 py-0.5 rounded-full font-bold">
-                {historyCount}
-              </span>
-            )}
-          </button>
-
-          <div>
+          </div>
+          <div className="movie-navbar__panel-anchor">
             {currentUser ? (
-              <div className="flex items-center gap-3">
-                {/* 🌟 THAY THẾ ICON VẪY TAY BẰNG ẢNH ĐẠI DIỆN THỰC TẾ */}
+              <>
                 <button
-                  onClick={() => setActiveTab("profile")}
-                  className={`flex items-center gap-2.5 px-3 py-1.5 rounded-full transition cursor-pointer border ${
-                    activeTab === "profile"
-                      ? "bg-red-600/20 border-red-500 text-white"
-                      : darkMode
-                        ? "bg-slate-800 border-slate-700 hover:bg-slate-700 text-slate-200"
-                        : "bg-slate-100 border-slate-300 hover:bg-slate-200 text-slate-800"
-                  }`}
-                  title="Xem trang cá nhân"
+                  type="button"
+                  className="movie-navbar__account-button"
+                  onClick={() => setOpenPanel(openPanel === "profile" ? "" : "profile")}
+                  aria-label={`Tài khoản ${currentUser.name || currentUser.email}`}
+                  aria-expanded={openPanel === "profile"}
                 >
-                  {currentUser?.avatar ? (
-                    <img
-                      src={currentUser.avatar}
-                      alt="Avatar"
-                      className="w-7 h-7 rounded-full object-cover border-2 border-red-500 shadow"
-                    />
+                  {currentUser.avatar ? (
+                    <img src={currentUser.avatar} alt="" />
                   ) : (
-                    <div className="w-7 h-7 rounded-full bg-red-600 flex items-center justify-center text-white text-xs font-bold shadow border-2 border-red-500">
-                      {currentUser?.name
-                        ? currentUser.name.charAt(0).toUpperCase()
-                        : "U"}
-                    </div>
+                    <UserRound size={19} />
                   )}
-                  <span className="text-xs font-semibold max-w-22.5 truncate hidden sm:inline-block">
-                    {currentUser?.name || "Tài khoản"}
-                  </span>
+                  <ChevronDown size={13} />
                 </button>
-
-                <button
-                  onClick={onLogout}
-                  className={`p-2 rounded-full transition cursor-pointer ${
-                    darkMode
-                      ? "bg-slate-800 hover:bg-slate-700 text-slate-300"
-                      : "bg-slate-100 hover:bg-slate-200 text-slate-700"
-                  }`}
-                  title="Đăng xuất"
-                >
-                  <LogOut className="w-5 h-5" />
-                </button>
-              </div>
+                {openPanel === "profile" && (
+                  <div className="movie-navbar__popover movie-navbar__popover--profile">
+                    <strong>{currentUser.name || "Tài khoản Movie App"}</strong>
+                    <span>{currentUser.email}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSelectView("profile");
+                        setOpenPanel("");
+                      }}
+                    >
+                      Hồ sơ cá nhân
+                    </button>
+                    <button type="button" onClick={onLogout}>
+                      <LogOut size={15} /> Đăng xuất
+                    </button>
+                  </div>
+                )}
+              </>
             ) : (
               <button
-                onClick={onOpenAuth}
-                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-full text-sm transition cursor-pointer"
+                type="button"
+                className="movie-navbar__account-button"
+                onClick={onRequestLogin}
+                aria-label="Đăng nhập"
               >
-                <LogIn className="w-4 h-4" />
-                <span>Đăng nhập</span>
+                <UserRound size={19} />
               </button>
             )}
           </div>
+        </div>
+
+        <div className="movie-navbar__mobile-actions">
+          <button type="button" onClick={() => onRequestVip()} aria-label="Đặc quyền VIP">
+            <Ticket size={17} />
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelectView("favorites")}
+            aria-label={`Danh sách của tôi, ${favoriteCount} phim`}
+          >
+            <Heart size={18} />
+          </button>
+          <button type="button" onClick={onRequestLogin} aria-label="Tài khoản">
+            <UserRound size={18} />
+          </button>
         </div>
       </div>
-    </nav>
+
+      <nav className="movie-navbar__subnav" aria-label="Thể loại phim">
+        <div className="movie-navbar__subnav-inner">
+          <span className="movie-navbar__subnav-label">Khám phá</span>
+          {categories.map((category) => (
+            <button
+              type="button"
+              key={category}
+              className={selectedCategory === category ? "is-active" : ""}
+              onClick={() => {
+                onSelectView("home");
+                onSelectCategory(category);
+                document.getElementById("movie-rows")?.scrollIntoView({ behavior: "smooth" });
+              }}
+            >
+              {category}
+            </button>
+          ))}
+          <button
+            type="button"
+            className={activeView === "favorites" ? "is-active" : ""}
+            onClick={() => onSelectView("favorites")}
+          >
+            <Heart size={14} /> Danh sách của tôi
+          </button>
+          <button
+            type="button"
+            className={activeView === "history" ? "is-active" : ""}
+            onClick={() => onSelectView("history")}
+          >
+            <Clock3 size={14} /> Đang xem
+          </button>
+        </div>
+      </nav>
+      <div className="movie-navbar__filters" aria-label="Bộ lọc phim">
+        <label>
+          Quốc gia
+          <select
+            value={selectedCountry}
+            onChange={(event) => onSelectCountry(event.target.value)}
+          >
+            <option value="Tất cả">Tất cả</option>
+            {countries.map((country) => (
+              <option key={country} value={country}>{country}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Năm
+          <select
+            value={selectedYear}
+            onChange={(event) => onSelectYear(event.target.value)}
+          >
+            <option value="Tất cả">Tất cả</option>
+            {years.map((year) => (
+              <option key={year} value={year}>{year}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Sắp xếp
+          <select value={sortBy} onChange={(event) => onSelectSort(event.target.value)}>
+            <option value="popular">Mới nhất</option>
+            <option value="rating">Đánh giá cao</option>
+            <option value="title">Tên A–Z</option>
+          </select>
+        </label>
+      </div>
+    </header>
   );
 }

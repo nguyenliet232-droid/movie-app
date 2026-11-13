@@ -1,264 +1,274 @@
-import { useState, useEffect, useRef } from "react";
-import { X, Star, Send, MessageSquare } from "lucide-react";
-import { readJsonStorage } from "../utils/storage";
+import { useEffect, useState } from "react";
+import { Heart, Play, Send, Star, X } from "lucide-react";
+import { TMDB_API_KEY } from "../utils/api";
+import { readJsonStorage, writeJsonStorage } from "../utils/storage";
 
-function MovieDetailModal({ movie, onClose, onAddToHistory, currentUser }) {
-  // 📍 Ref tham chiếu tới thẻ <video> để quản lý thời gian xem dở
-  const videoRef = useRef(null);
+function getYoutubeId(value) {
+  try {
+    const url = new URL(value);
+    if (url.hostname === "youtu.be") return url.pathname.slice(1);
+    if (
+      url.hostname === "youtube.com" ||
+      url.hostname === "www.youtube.com" ||
+      url.hostname === "m.youtube.com"
+    ) {
+      if (url.pathname === "/watch") return url.searchParams.get("v");
+      const match = url.pathname.match(/^\/(?:embed|shorts)\/([^/]+)/);
+      return match?.[1] || null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
 
-  const loadReviews = (targetMovie) => {
-    if (!targetMovie) return [];
-    return readJsonStorage(
-      `movie_comments_${targetMovie._id}`,
-      [
-        {
-          id: 1,
-          userName: "Nguyễn Văn A",
-          userEmail: "nguyenvana@gmail.com",
-          rating: 5,
-          text: "Phim xem cực kỳ cuốn và cảm xúc!",
-          date: "12/05/2026",
-        },
-        {
-          id: 2,
-          userName: "Trần Thị B",
-          userEmail: "tranthib@gmail.com",
-          rating: 4,
-          text: "Kỹ xảo đẹp, âm thanh sống động.",
-          date: "14/05/2026",
-        },
-      ],
-      Array.isArray,
-    );
-  };
-
-  const [reviewState, setReviewState] = useState(() => ({
-    movieId: movie?._id,
-    reviews: loadReviews(movie),
-  }));
-
-  const reviews =
-    reviewState.movieId === movie?._id
-      ? reviewState.reviews
-      : loadReviews(movie);
-
-  const [rating, setRating] = useState(5);
+export default function MovieDetailModal({
+  movie,
+  currentUser,
+  isFavorite,
+  onClose,
+  onToggleFavorite,
+  onRequestLogin,
+}) {
+  const [reviews, setReviews] = useState(() =>
+    readJsonStorage(
+      `movie_comments_${movie._id}`,
+      [],
+      (value) => Array.isArray(value),
+    ),
+  );
   const [comment, setComment] = useState("");
+  const [rating, setRating] = useState(5);
+  const [playbackUrl, setPlaybackUrl] = useState("");
+  const [playbackError, setPlaybackError] = useState("");
+  const [loadingPlayback, setLoadingPlayback] = useState(false);
 
   useEffect(() => {
-    if (movie && onAddToHistory) onAddToHistory(movie);
-  }, [movie, onAddToHistory]);
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
 
-  if (!movie) return null;
-
-  // 📍 Khóa lưu trữ vị trí xem trong localStorage cho modal phim này
-  const storageKey = `watch_progress_modal_${movie._id}`;
-
-  // 📍 Khi video load xong metadata, tự động tua đến thời gian đã xem dở lần trước
-  const handleLoadedMetadata = () => {
-    if (videoRef.current) {
-      const savedTime = localStorage.getItem(storageKey);
-      if (savedTime && !isNaN(savedTime)) {
-        videoRef.current.currentTime = parseFloat(savedTime);
-      }
+  const playMovie = async () => {
+    setPlaybackError("");
+    const directUrl = movie.videoUrl || movie.trailerUrl;
+    if (directUrl) {
+      setPlaybackUrl(directUrl);
+      return;
     }
-  };
-
-  // 📍 Khi người dùng đang xem, liên tục cập nhật thời gian vào localStorage
-  const handleTimeUpdate = () => {
-    if (videoRef.current && videoRef.current.currentTime > 0) {
-      if (
-        videoRef.current.duration &&
-        videoRef.current.currentTime < videoRef.current.duration - 2
-      ) {
-        localStorage.setItem(storageKey, videoRef.current.currentTime);
-      } else {
-        localStorage.removeItem(storageKey);
-      }
-    }
-  };
-
-  // Gửi bình luận mới
-  const handleAddReview = (e) => {
-    e.preventDefault();
-    if (!comment.trim()) return;
-
-    if (!currentUser) {
-      alert("Vui lòng đăng nhập để gửi đánh giá và bình luận!");
+    if (!TMDB_API_KEY || !/^\d+$/.test(String(movie._id))) {
+      setPlaybackError("Chưa có liên kết phát phim cho nội dung này.");
       return;
     }
 
-    const newReview = {
-      id: Date.now(),
-      userName: currentUser.name || "Thành viên",
-      userEmail: currentUser.email || "",
-      rating: Number(rating),
-      text: comment.trim(),
-      date: new Date().toLocaleDateString("vi-VN"),
-    };
+    setLoadingPlayback(true);
+    try {
+      const response = await fetch(
+        `https://api.themoviedb.org/3/movie/${movie._id}/videos?api_key=${TMDB_API_KEY}&language=vi-VN`,
+        { headers: { Accept: "application/json" } },
+      );
+      if (!response.ok) {
+        throw new Error(`Trailer request failed with status ${response.status}.`);
+      }
 
-    const updatedReviews = [newReview, ...reviews];
-    setReviewState({ movieId: movie._id, reviews: updatedReviews });
-    localStorage.setItem(
-      `movie_comments_${movie._id}`,
-      JSON.stringify(updatedReviews),
-    );
-    setComment("");
+      const data = await response.json();
+      if (!Array.isArray(data.results)) {
+        throw new TypeError("Trailer service returned an invalid response.");
+      }
+
+      const trailer =
+        data.results.find(
+          (item) => item.site === "YouTube" && item.type === "Trailer",
+        ) || data.results.find((item) => item.site === "YouTube");
+      if (!trailer?.key) {
+        setPlaybackError("Phim này chưa có trailer để phát.");
+        return;
+      }
+      setPlaybackUrl(`https://www.youtube.com/watch?v=${trailer.key}`);
+    } catch (error) {
+      console.error("Could not load a movie trailer.", error);
+      setPlaybackError("Không thể tải trailer. Vui lòng thử lại.");
+    } finally {
+      setLoadingPlayback(false);
+    }
   };
 
+  const addReview = (event) => {
+    event.preventDefault();
+    if (!currentUser) {
+      onRequestLogin();
+      return;
+    }
+    const text = comment.trim();
+    if (!text) return;
+
+    const nextReviews = [
+      {
+        id: `${Date.now()}`,
+        userName: currentUser.name || currentUser.email || "Thành viên",
+        rating,
+        text,
+        date: new Date().toLocaleDateString("vi-VN"),
+      },
+      ...reviews,
+    ];
+    setReviews(nextReviews);
+    writeJsonStorage(`movie_comments_${movie._id}`, nextReviews);
+    setComment("");
+    setRating(5);
+  };
+
+  const youtubeId = playbackUrl ? getYoutubeId(playbackUrl) : null;
+
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-slate-900 border border-slate-800 w-full max-w-4xl rounded-2xl overflow-hidden shadow-2xl relative text-white my-8">
-        {/* Nút đóng */}
+    <div
+      className="movie-modal-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        className="movie-detail-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="movie-detail-title"
+      >
         <button
+          type="button"
+          className="movie-detail-modal__close"
           onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-white bg-slate-800/80 p-2 rounded-full z-10 transition cursor-pointer"
+          aria-label="Đóng chi tiết phim"
         >
-          <X className="w-5 h-5" />
+          <X size={20} />
         </button>
 
-        {/* Khung Trình chiếu Video */}
-        <div className="aspect-video w-full bg-black relative overflow-hidden rounded-t-2xl">
-          {(() => {
-            const getEmbedUrl = (url) => {
-              if (!url) return "";
-              let videoId = "";
-
-              if (url.includes("youtu.be/")) {
-                videoId = url.split("youtu.be/")[1]?.split("?")[0];
-              } else if (url.includes("watch?v=")) {
-                videoId = url.split("watch?v=")[1]?.split("&")[0];
-              } else if (url.includes("/embed/")) {
-                videoId = url.split("/embed/")[1]?.split("?")[0];
-              }
-
-              if (!videoId) return url;
-
-              return `https://www.youtube.com/embed/${videoId}?autoplay=1&modestbranding=1&rel=0&controls=1`;
-            };
-
-            const embedUrl = getEmbedUrl(movie.videoUrl);
-
-            return embedUrl.includes("youtube.com") ? (
+        <div className="movie-detail-modal__player">
+          {playbackUrl ? (
+            youtubeId ? (
               <iframe
-                src={embedUrl}
-                title={movie.title}
-                className="w-full h-full absolute inset-0 border-0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(youtubeId)}?autoplay=1&rel=0`}
+                title={`Trailer ${movie.title}`}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
-              ></iframe>
+              />
             ) : (
-              <video
-                ref={videoRef}
-                src={movie.videoUrl}
-                controls
-                autoPlay
-                onLoadedMetadata={handleLoadedMetadata}
-                onTimeUpdate={handleTimeUpdate}
-                className="w-full h-full object-cover"
-              ></video>
-            );
-          })()}
+              <video src={playbackUrl} controls autoPlay playsInline />
+            )
+          ) : (
+            <>
+              <img
+                src={movie.backdropUrl || movie.posterUrl}
+                alt=""
+                onError={(event) => event.currentTarget.removeAttribute("src")}
+              />
+              <button
+                type="button"
+                className="movie-detail-modal__play"
+                onClick={playMovie}
+                disabled={loadingPlayback}
+              >
+                <Play size={19} fill="currentColor" />
+                {loadingPlayback ? "Đang tải..." : "Xem trailer"}
+              </button>
+              {playbackError && (
+                <p className="movie-detail-modal__play-error" role="status">
+                  {playbackError}
+                </p>
+              )}
+            </>
+          )}
         </div>
 
-        {/* Thông tin Phim */}
-        <div className="p-6 space-y-6">
-          <div>
-            <h2 className="text-2xl font-bold mb-2 text-white">
-              {movie.title}
-            </h2>
-            <p className="text-slate-400 text-sm">
-              {movie.description || "Chưa có mô tả chi tiết cho bộ phim này."}
-            </p>
+        <div className="movie-detail-modal__content">
+          <div className="movie-detail-modal__heading">
+            <div>
+              <span className="movie-detail-modal__eyebrow">MOVIE APP</span>
+              <h2 id="movie-detail-title">{movie.title}</h2>
+            </div>
+            <button
+              type="button"
+              className={
+                isFavorite
+                  ? "movie-detail-modal__favorite is-active"
+                  : "movie-detail-modal__favorite"
+              }
+              onClick={() => onToggleFavorite(movie)}
+              aria-pressed={isFavorite}
+            >
+              <Heart size={17} fill={isFavorite ? "currentColor" : "none"} />
+              {isFavorite ? "Đã lưu" : "Danh sách của tôi"}
+            </button>
           </div>
 
-          {/* 🌟 PHẦN ĐÁNH GIÁ & BÌNH LUẬN */}
-          <div className="border-t border-slate-800 pt-6 space-y-6">
-            <h3 className="text-lg font-bold flex items-center gap-2 text-red-500">
-              <MessageSquare className="w-5 h-5" /> Đánh Giá & Bình Luận (
-              {reviews.length})
-            </h3>
+          <div className="movie-detail-modal__meta">
+            <span className="movie-detail-modal__rating">
+              <Star size={15} fill="currentColor" />{" "}
+              {Number(movie.rating || 0).toFixed(1)}
+            </span>
+            <span>{movie.releaseYear}</span>
+            <span>{movie.country}</span>
+            <span>{movie.category}</span>
+          </div>
+          <p className="movie-detail-modal__description">{movie.description}</p>
 
-            {/* Form gửi bình luận */}
-            <form
-              onSubmit={handleAddReview}
-              className="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50 space-y-3"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-300 font-medium">
-                  Chấm điểm sao:
-                </span>
+          <section className="movie-reviews" aria-label="Đánh giá và bình luận">
+            <h3>Đánh giá và bình luận</h3>
+            <form className="movie-review-form" onSubmit={addReview}>
+              <label>
+                Đánh giá
                 <select
                   value={rating}
-                  onChange={(e) => setRating(e.target.value)}
-                  className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs text-amber-400 font-bold focus:outline-none"
+                  onChange={(event) => setRating(Number(event.target.value))}
                 >
-                  <option value="5">⭐⭐⭐⭐⭐ (5/5)</option>
-                  <option value="4">⭐⭐⭐⭐ (4/5)</option>
-                  <option value="3">⭐⭐⭐ (3/5)</option>
-                  <option value="2">⭐⭐ (2/5)</option>
-                  <option value="1">⭐ (1/5)</option>
+                  {[5, 4, 3, 2, 1].map((score) => (
+                    <option key={score} value={score}>
+                      {score} sao
+                    </option>
+                  ))}
                 </select>
-              </div>
-
+              </label>
               <textarea
-                rows="2"
+                rows="3"
+                value={comment}
+                onChange={(event) => setComment(event.target.value)}
                 placeholder={
                   currentUser
-                    ? "Chia sẻ cảm nghĩ của bạn về bộ phim này..."
-                    : "Vui lòng đăng nhập để bình luận..."
+                    ? "Chia sẻ cảm nghĩ của bạn..."
+                    : "Đăng nhập để viết bình luận."
                 }
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                disabled={!currentUser}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-red-500 disabled:opacity-50"
-              ></textarea>
-
-              <div className="flex justify-between items-center">
-                {!currentUser && (
-                  <span className="text-xs text-amber-400">
-                    ⚠️ Bạn cần đăng nhập để viết bình luận.
-                  </span>
-                )}
-                <button
-                  type="submit"
-                  disabled={!currentUser}
-                  className="ml-auto flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-4 py-2 rounded-xl text-xs transition disabled:opacity-50 cursor-pointer"
-                >
-                  <Send className="w-3.5 h-3.5" /> Gửi Bình Luận
-                </button>
-              </div>
+                aria-label="Viết bình luận"
+              />
+              <button type="submit" className="movie-review-form__submit">
+                <Send size={15} />
+                Gửi bình luận
+              </button>
             </form>
 
-            {/* Danh sách bình luận */}
-            <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
-              {reviews.map((rev) => (
-                <div
-                  key={rev.id}
-                  className="bg-slate-800/30 p-3.5 rounded-xl border border-slate-800 space-y-1"
-                >
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold text-sm text-slate-200">
-                      {rev.userName}
-                    </span>
-                    <span className="text-[10px] text-slate-500">
-                      {rev.date}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1 text-amber-400 text-xs">
-                    {[...Array(Number(rev.rating))].map((_, i) => (
-                      <Star key={i} className="w-3.5 h-3.5 fill-current" />
-                    ))}
-                  </div>
-                  <p className="text-xs text-slate-300">{rev.text}</p>
-                </div>
-              ))}
-            </div>
-          </div>
+            {reviews.length ? (
+              <ul className="movie-review-list">
+                {reviews.map((review) => (
+                  <li key={review.id}>
+                    <div className="movie-review-list__heading">
+                      <strong>{review.userName}</strong>
+                      <span>
+                        ★ {review.rating} · {review.date}
+                      </span>
+                    </div>
+                    <p>{review.text}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="movie-review-list__empty">
+                Chưa có bình luận nào. Hãy chia sẻ cảm nhận đầu tiên.
+              </p>
+            )}
+          </section>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
-
-export default MovieDetailModal;

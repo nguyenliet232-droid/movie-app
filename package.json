@@ -7,10 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run src/utils/fallbackMovies.test.js"
   },
   "dependencies": {
-    "@react-oauth/google": "^0.13.5",
     "lucide-react": "^1.52.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
@@ -28,6 +28,7 @@
     "globals": "^17.12.0",
     "postcss": "^8.5.29",
     "tailwindcss": "^4.3.3",
-    "vite": "^8.3.0"
+    "vite": "^8.3.0",
+    "vitest": "^5.1.0"
   }
 }

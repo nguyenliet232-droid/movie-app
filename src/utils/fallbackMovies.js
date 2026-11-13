@@ -11,11 +11,10 @@ export function normalizeMovie(movie, index = 0) {
   normalized.country = movie?.country || "Mỹ";
   normalized.releaseYear = movie?.releaseYear || 2024;
   normalized.rating = movie?.rating ?? 8.5;
-  normalized.isVipOnly = Boolean(movie?.isVipOnly);
   normalized.posterUrl =
     movie?.posterUrl || movie?.poster || movie?.thumbnail || defaultPoster;
   normalized.poster = normalized.posterUrl;
-  normalized.videoUrl = movie?.videoUrl || "";
+  normalized.backdropUrl = movie?.backdropUrl || movie?.backdrop || "";
 
   return normalized;
 }
@@ -29,10 +28,8 @@ export const fallbackMovies = [
     country: "Mỹ",
     releaseYear: 2025,
     rating: 8.9,
-    isVipOnly: false,
     posterUrl:
       "https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?auto=format&fit=crop&w=900&q=80",
-    videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
   },
   {
     _id: "fallback-2",
@@ -42,10 +39,8 @@ export const fallbackMovies = [
     country: "Nhật Bản",
     releaseYear: 2024,
     rating: 8.7,
-    isVipOnly: true,
     posterUrl:
       "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=900&q=80",
-    videoUrl: "https://www.youtube.com/watch?v=ysz5S6PUM-U",
   },
   {
     _id: "fallback-3",
@@ -55,10 +50,8 @@ export const fallbackMovies = [
     country: "Hàn Quốc",
     releaseYear: 2025,
     rating: 8.3,
-    isVipOnly: false,
     posterUrl:
       "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=900&q=80",
-    videoUrl: "https://www.youtube.com/watch?v=ScMzIvxBSi4",
   },
   {
     _id: "fallback-4",
@@ -68,10 +61,8 @@ export const fallbackMovies = [
     country: "Việt Nam",
     releaseYear: 2023,
     rating: 8.1,
-    isVipOnly: false,
     posterUrl:
       "https://images.unsplash.com/photo-1493246507139-91e8fad9978e?auto=format&fit=crop&w=900&q=80",
-    videoUrl: "https://www.youtube.com/watch?v=ysz5S6PUM-U",
   },
   {
     _id: "fallback-5",
@@ -81,10 +72,8 @@ export const fallbackMovies = [
     country: "Mỹ",
     releaseYear: 2026,
     rating: 8.8,
-    isVipOnly: true,
     posterUrl:
       "https://images.unsplash.com/photo-1446776653964-20c1d3a81b06?auto=format&fit=crop&w=900&q=80",
-    videoUrl: "https://www.youtube.com/watch?v=ScMzIvxBSi4",
   },
 ];
 
